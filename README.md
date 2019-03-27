@@ -1,4 +1,4 @@
-<p align="center"><img src="https://i.imgur.com/8M1LJMx.jpg" /></p>
+<p align="center"><img src="https://i.imgur.com/CBGh0Yx.png" /></p>
 
 # Evil Limiter
 
