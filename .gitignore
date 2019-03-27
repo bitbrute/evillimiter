@@ -1,0 +1,14 @@
+# Python byte translated files
+__pycache__/
+*.py[cod]
+
+# Python specific
+venv/
+dist/
+build/
+eggs/
+*.egg-info
+
+# VisualStudio Code
+.vscode/
+*.code-workspace
