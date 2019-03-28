@@ -1,17 +1,17 @@
 from .io import IO
 
 
-_MAIN_BANNER = rf"""{IO.Fore.LIGHTRED_EX}
+_MAIN_BANNER = r"""{}
 ███████╗██╗   ██╗██╗██╗       ██╗     ██╗███╗   ███╗██╗████████╗███████╗██████╗ 
 ██╔════╝██║   ██║██║██║       ██║     ██║████╗ ████║██║╚══██╔══╝██╔════╝██╔══██╗
 █████╗  ██║   ██║██║██║       ██║     ██║██╔████╔██║██║   ██║   █████╗  ██████╔╝
 ██╔══╝  ╚██╗ ██╔╝██║██║       ██║     ██║██║╚██╔╝██║██║   ██║   ██╔══╝  ██╔══██╗
 ███████╗ ╚████╔╝ ██║███████╗  ███████╗██║██║ ╚═╝ ██║██║   ██║   ███████╗██║  ██║
 ╚══════╝  ╚═══╝  ╚═╝╚══════╝  ╚══════╝╚═╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
-                {IO.Style.RESET_ALL + IO.Style.BRIGHT}by bitbrute  ~  limit devices on your network :3
+                {}by bitbrute  ~  limit devices on your network :3
                                     v[_V_]
 
-"""
+""".format(IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL + IO.Style.BRIGHT)
 
 
 def get_main_banner(version):

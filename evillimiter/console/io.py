@@ -37,14 +37,14 @@ class IO(object):
         """
         Print a success status message
         """
-        IO.print(f'{IO.Style.BRIGHT + IO.Fore.LIGHTGREEN_EX}OK{IO.Style.RESET_ALL}   {text}', end=end)
+        IO.print('{}OK{}   {}'.format(IO.Style.BRIGHT + IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL, text), end=end)
 
     @staticmethod
     def error(text):
         """
         Print an error status message
         """
-        IO.print(f'{IO.Style.BRIGHT + IO.Fore.LIGHTRED_EX}ERR{IO.Style.RESET_ALL}  {text}')
+        IO.print('{}ERR{}  {}'.format(IO.Style.BRIGHT + IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL, text))
 
     @staticmethod
     def spacer():

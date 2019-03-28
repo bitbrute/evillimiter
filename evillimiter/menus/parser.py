@@ -120,7 +120,7 @@ class CommandParser(object):
                     elif cmd.type == CommandParser.CommandType.PARAMETERIZED_FLAG_COMMAND:
                         if (len(command) - 1) < (i + 1):
                             # no more command arguments to process
-                            IO.error(f'parameter for flag {IO.Fore.LIGHTYELLOW_EX}{cmd.name}{IO.Style.RESET_ALL} is missing')
+                            IO.error('parameter for flag {}{}{} is missing'.format(IO.Fore.LIGHTYELLOW_EX, cmd.name, IO.Style.RESET_ALL))
                             return
 
                         # if parameterized flag, set value to next argument
@@ -143,13 +143,13 @@ class CommandParser(object):
                         break
 
             if not is_arg_processed:
-                IO.error(f'{IO.Fore.LIGHTYELLOW_EX}{arg}{IO.Style.RESET_ALL} is an unknown command.')
+                IO.error('{}{}{} is an unknown command.'.format(IO.Fore.LIGHTYELLOW_EX, arg, IO.Style.RESET_ALL))
                 return
 
         # check if there are any parameters missing
         for cmd in self._parameter_commands:
             if result_dict[cmd.name] is None:
-                IO.error(f'parameter {IO.Fore.LIGHTYELLOW_EX}{cmd.name}{IO.Style.RESET_ALL} is missing')
+                IO.error('parameter {}{}{} is missing'.format(IO.Fore.LIGHTYELLOW_EX, cmd.name, IO.Style.RESET_ALL))
                 return
 
         # set unspecified flags to False instead of None

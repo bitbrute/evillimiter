@@ -22,14 +22,14 @@ class Limiter(object):
             self.unlimit(host)
 
         # add a class to the root qdisc with specified rate
-        shell.execute_suppressed(f'{BIN_TC} class add dev {self.interface} parent 1:0 classid 1:{id_} htb rate {rate} ceil {rate}')
+        shell.execute_suppressed('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} ceil {r}'.format(BIN_TC, self.interface, id_, r=rate))
         # add a fw filter that filters packets marked with the corresponding ID
-        shell.execute_suppressed(f'{BIN_TC} filter add dev {self.interface} parent 1:0 protocol ip prio {id_} handle {id_} fw flowid 1:{id_}')
+        shell.execute_suppressed('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=id_))
 
         # marks outgoing packets 
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t mangle -A POSTROUTING -s {host.ip} -j MARK --set-mark {id_}')
+        shell.execute_suppressed('{} -t mangle -A POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
         # marks incoming packets
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t mangle -A PREROUTING -d {host.ip} -j MARK --set-mark {id_}')
+        shell.execute_suppressed('{} -t mangle -A PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
 
         self.host_id_map[host] = id_
         host.limited = True
@@ -42,9 +42,9 @@ class Limiter(object):
             self.unlimit(host)
 
         # drops forwarded packets with matching source
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t filter -A FORWARD -s {host.ip} -j DROP')
+        shell.execute_suppressed('{} -t filter -A FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
         # drops forwarded packets with matching destination
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t filter -A FORWARD -d {host.ip} -j DROP')
+        shell.execute_suppressed('{} -t filter -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
 
         self.host_id_map[host] = id_
         host.blocked = True
@@ -74,14 +74,14 @@ class Limiter(object):
         Deletes the tc class and applied filters
         for a given ID (host)
         """
-        shell.execute_suppressed(f'{BIN_TC} filter del dev {self.interface} parent 1:0 prio {id_}')
-        shell.execute_suppressed(f'{BIN_TC} class del dev {self.interface} parent 1:0 classid 1:{id_}')
+        shell.execute_suppressed('{} filter del dev {} parent 1:0 prio {}'.format(BIN_TC, self.interface, id_))
+        shell.execute_suppressed('{} class del dev {} parent 1:0 classid 1:{}'.format(BIN_TC, self.interface, id_))
 
     def _delete_iptables_entries(self, host: Host, id_):
         """
         Deletes iptables rules for a given ID (host)
         """
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t mangle -D POSTROUTING -s {host.ip} -j MARK --set-mark {id_}')
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t mangle -D PREROUTING -d {host.ip} -j MARK --set-mark {id_}')
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t filter -D FORWARD -s {host.ip} -j DROP')
-        shell.execute_suppressed(f'{BIN_IPTABLES} -t filter -D FORWARD -d {host.ip} -j DROP')
+        shell.execute_suppressed('{} -t mangle -D POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
+        shell.execute_suppressed('{} -t mangle -D PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
+        shell.execute_suppressed('{} -t filter -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+        shell.execute_suppressed('{} -t filter -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
