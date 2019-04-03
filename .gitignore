@@ -4,6 +4,7 @@ __pycache__/
 
 # Python specific
 venv/
+env/
 dist/
 build/
 eggs/
@@ -12,3 +13,6 @@ eggs/
 # VisualStudio Code
 .vscode/
 *.code-workspace
+
+# Other
+TODO
