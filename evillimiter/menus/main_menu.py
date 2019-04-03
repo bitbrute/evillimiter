@@ -114,42 +114,45 @@ class MainMenu(CommandMenu):
         Handles 'limit' command-line argument
         Limits bandwith of host to specified rate
         """
-        host = self._get_host_by_id(args.id)
+        hosts = self._get_hosts_by_ids(args.id)
         rate = args.rate
 
-        if host is not None:
-            if not host.spoofed:
-                self.arp_spoofer.add(host)
+        if hosts is not None and len(hosts) > 0:
+            for host in hosts:
+                if not host.spoofed:
+                    self.arp_spoofer.add(host)
 
-            if netutils.validate_netrate_string(rate):
-                self.limiter.limit(host, rate)
-            else:
-                IO.error('limit rate is invalid.')
-                return
-            
-            IO.ok('{}{}{} limited{} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL, rate))
+                if netutils.validate_netrate_string(rate):
+                    self.limiter.limit(host, rate)
+                else:
+                    IO.error('limit rate is invalid.')
+                    return
+                
+                IO.ok('{}{}{} limited{} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL, rate))
 
     def _block_handler(self, args):
         """
         Handles 'block' command-line argument
         Blocks internet communication for host
         """
-        host = self._get_host_by_id(args.id)
-        if host is not None:
-            if not host.spoofed:
-                self.arp_spoofer.add(host)
+        hosts = self._get_hosts_by_ids(args.id)
+        if hosts is not None and len(hosts) > 0:
+            for host in hosts:
+                if not host.spoofed:
+                    self.arp_spoofer.add(host)
 
-            self.limiter.block(host)
-            IO.ok('{}{}{} blocked{}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.RED, IO.Style.RESET_ALL))
+                self.limiter.block(host)
+                IO.ok('{}{}{} blocked{}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.RED, IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
         """
         Handles 'free' command-line argument
         Frees the host from all limitations
         """
-        host = self._get_host_by_id(args.id)
-        if host is not None:
-            self._free_host(host)
+        hosts = self._get_hosts_by_ids(args.id)
+        if hosts is not None and len(hosts) > 0:
+            for host in hosts:
+                self._free_host(host)
 
     def _clear_handler(self, args):
         """
@@ -165,7 +168,7 @@ class MainMenu(CommandMenu):
         Handles 'help' command-line argument
         Prints help message including commands and usage
         """
-        spaces = ' ' * 20
+        spaces = ' ' * 30
 
         IO.print(
             """
@@ -175,24 +178,24 @@ class MainMenu(CommandMenu):
 {y}hosts{r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
 
-{y}limit [ID] [rate]{r}{}limits bandwith of host (uload/dload).
+{y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
 {b}{s}e.g.: limit 4 100kbit
-{s}      limit 2 1gbit
-{s}      limit 5 500tbit{r}
+{s}      limit 2,3,4 1gbit
+{s}      limit 5,1 500tbit{r}
 
-{y}block [ID]{r}{}blocks internet access of host.
-{b}{s}e.g.: block 3{r}
+{y}block [ID1,ID2,...]{r}{}blocks internet access of host(s).
+{b}{s}e.g.: block 3,2{r}
 
-{y}free [ID]{r}{}unlimits/unblocks host.
+{y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
 {b}{s}e.g.: free 3{r}
 
 {y}clear{r}{}clears the terminal window.
             """.format(
                     spaces[len('scan'):],
                     spaces[len('hosts'):],
-                    spaces[len('limit [ID] [rate]'):],
-                    spaces[len('block [ID]'):],
-                    spaces[len('free [ID]'):],
+                    spaces[len('limit [ID1,ID2,...] [rate]'):],
+                    spaces[len('block [ID1,ID2,...]'):],
+                    spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('clear'):],
                     y=IO.Fore.LIGHTYELLOW_EX, r=IO.Style.RESET_ALL, b=IO.Style.BRIGHT,
                     s=spaces
@@ -202,18 +205,23 @@ class MainMenu(CommandMenu):
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
 
-    def _get_host_by_id(self, id_):
+    def _get_hosts_by_ids(self, ids_string):
         try:
-            identifier = int(id_)
+            ids = [int(x) for x in ids_string.split(',')]
         except ValueError:
-            IO.error('identifier is not an integer.')
+            IO.error('\'{}\' are invalid IDs.'.format(ids_string))
             return
 
-        if len(self.hosts) == 0 or identifier not in range(len(self.hosts)):
-            IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, identifier, IO.Style.RESET_ALL))
-            return
+        hosts = []
 
-        return self.hosts[identifier]
+        for id_ in ids:
+            if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
+                IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                return
+            if self.hosts[id_] not in hosts:
+                hosts.append(self.hosts[id_])
+
+        return hosts
 
     def _free_host(self, host):
         """
