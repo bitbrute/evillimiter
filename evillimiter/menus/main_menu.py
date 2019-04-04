@@ -222,13 +222,15 @@ class MainMenu(CommandMenu):
 {y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
 {b}{s}e.g.: limit 4 100kbit
 {s}      limit 2,3,4 1gbit
-{s}      limit 5,1 500tbit{r}
+{s}      limit all 200kbit{r}
 
 {y}block [ID1,ID2,...]{r}{}blocks internet access of host(s).
-{b}{s}e.g.: block 3,2{r}
+{b}{s}e.g.: block 3,2
+{s}      block all{r}
 
 {y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
-{b}{s}e.g.: free 3{r}
+{b}{s}e.g.: free 3
+{s}      free all{r}
 
 {y}add [IP] (--mac [MAC]){r}{}adds custom host to host list.
 {s}mac resolved automatically.
@@ -253,6 +255,9 @@ class MainMenu(CommandMenu):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
 
     def _get_hosts_by_ids(self, ids_string):
+        if ids_string == 'all':
+            return self.hosts.copy()
+
         try:
             ids = [int(x) for x in ids_string.split(',')]
         except ValueError:

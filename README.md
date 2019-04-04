@@ -50,7 +50,7 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | ------- | ----------- |
 | ```scan``` | Scans your network for online hosts. One of the first things to do after start.
 | ```hosts``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.
-| ```limit [ID1,ID2,...] [Rate]``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```, ```tbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit 2,4 1gbit```
+| ```limit [ID1,ID2,...] [Rate]``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```, ```tbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
 | ```block [ID1,ID2,...]``` | Blocks internet connection of host(s) associated to specified ID.
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
