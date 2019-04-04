@@ -1,0 +1,6 @@
+[ CHANGELOG ]
+
+[ v1.1.0 ]
+- Manually add customized hosts using 'add' command (e.g.: add 192.168.178.24 --mac fc:fb:23:dd:ac:63)
+- Multiple host selection using a comma separated IDs (e.g.: 6,3,5)
+- Select all hosts at once using 'all' instead of comma separated IDs
