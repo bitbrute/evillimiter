@@ -1,3 +1,4 @@
+import socket
 import netaddr
 import collections
 from terminaltables import SingleTable
@@ -29,6 +30,10 @@ class MainMenu(CommandMenu):
 
         free_parser = self.parser.add_subparser('free', self._free_handler)
         free_parser.add_parameter('id')
+
+        add_parser = self.parser.add_subparser('add', self._add_handler)
+        add_parser.add_parameter('ip')
+        add_parser.add_parameterized_flag('--mac', 'mac')
 
         self.parser.add_subparser('help', self._help_handler)
         self.parser.add_subparser('?', self._help_handler)
@@ -154,6 +159,42 @@ class MainMenu(CommandMenu):
             for host in hosts:
                 self._free_host(host)
 
+    def _add_handler(self, args):
+        """
+        Handles 'add' command-line argument
+        Adds custom host to host list
+        """
+        ip = args.ip
+        if not netutils.validate_ip_address(ip):
+            IO.error('invalid ip address.')
+            return
+
+        if args.mac:
+            mac = args.mac
+            if not netutils.validate_mac_address(mac):
+                IO.error('invalid mac address.')
+                return
+        else:
+            mac = netutils.get_mac_by_ip(self.interface, ip)
+            if mac is None:
+                IO.error('unable to resolve mac address. specify manually (--mac).')
+                return
+
+        name = None
+        try:
+            host_info = socket.gethostbyaddr(ip)
+            name = None if host_info is None else host_info[0]
+        except socket.herror:
+            pass
+
+        host = Host(ip, mac, name)
+        if host in self.hosts:
+            IO.error('host does already exist.')
+            return
+
+        self.hosts.append(host)   
+        IO.ok('host added.') 
+
     def _clear_handler(self, args):
         """
         Handler for the 'clear' command-line argument
@@ -189,6 +230,11 @@ class MainMenu(CommandMenu):
 {y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
 {b}{s}e.g.: free 3{r}
 
+{y}add [IP] (--mac [MAC]){r}{}adds custom host to host list.
+{s}mac resolved automatically.
+{b}{s}e.g.: add 192.168.178.24
+{s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
+
 {y}clear{r}{}clears the terminal window.
             """.format(
                     spaces[len('scan'):],
@@ -196,6 +242,7 @@ class MainMenu(CommandMenu):
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('block [ID1,ID2,...]'):],
                     spaces[len('free [ID1,ID2,...]'):],
+                    spaces[len('add [IP] (--mac [MAC])'):],
                     spaces[len('clear'):],
                     y=IO.Fore.LIGHTYELLOW_EX, r=IO.Style.RESET_ALL, b=IO.Style.BRIGHT,
                     s=spaces

@@ -1,3 +1,4 @@
+import re
 import netifaces
 from scapy.all import ARP, sr1 # pylint: disable=no-name-in-module
 
@@ -88,6 +89,14 @@ def validate_netrate_string(string):
 
     # if offset = 0, number is missing
     return offset > 0 and string[offset:] in ('bit', 'kbit', 'mbit', 'gbit', 'tbit')
+
+
+def validate_ip_address(ip):
+    return re.match(r'^(\d{1,3}\.){3}(\d{1,3})$', ip) is not None
+
+
+def validate_mac_address(mac):
+    return re.match(r'^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$', mac) is not None
 
 
 def create_qdisc_root(interface):
