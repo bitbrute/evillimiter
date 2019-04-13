@@ -113,7 +113,7 @@ def process_arguments(args):
     return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask)
 
 
-def initialize(interface: str):
+def initialize(interface):
     """
     Sets up requirements, e.g. IP-Forwarding, 3rd party applications
     """
