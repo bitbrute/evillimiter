@@ -1,11 +1,9 @@
-import os
+import evillimiter.console.shell as shell
 
-
-DEVNULL = open(os.devnull, 'w')
 BROADCAST = 'ff:ff:ff:ff:ff:ff'
 
-BIN_TC = '/sbin/tc'
-BIN_IPTABLES = '/sbin/iptables'
-BIN_SYSCTL = '/sbin/sysctl'
+BIN_TC = shell.locate_bin('tc')
+BIN_IPTABLES = shell.locate_bin('iptables')
+BIN_SYSCTL = shell.locate_bin('sysctl')
 
 IP_FORWARD_LOC = 'net.ipv4.ip_forward'
