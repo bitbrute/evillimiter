@@ -56,6 +56,7 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
 | ```clear``` | Clears the terminal window.
+| ```quit``` | Quits the application.
 | ```?```, ```help``` | Displays command information similar to this one.
 
 ## Restrictions

@@ -40,6 +40,9 @@ class MainMenu(CommandMenu):
         self.parser.add_subparser('help', self._help_handler)
         self.parser.add_subparser('?', self._help_handler)
 
+        self.parser.add_subparser('quit', self._quit_handler)
+        self.parser.add_subparser('exit', self._quit_handler)
+
         self.version = version          # application version
         self.interface = interface      # specified IPv4 interface
         self.gateway_ip = gateway_ip 
@@ -61,8 +64,10 @@ class MainMenu(CommandMenu):
         # start the spoof thread
         self.arp_spoofer.start()
 
-    def interrupt_handler(self):
-        IO.spacer()
+    def interrupt_handler(self, ctrl_c=True):
+        if ctrl_c:
+            IO.spacer()
+
         IO.ok('cleaning up... stand by...')
 
         self.arp_spoofer.stop()
@@ -255,6 +260,8 @@ class MainMenu(CommandMenu):
 {s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
 
 {y}clear{r}{}clears the terminal window.
+
+{y}quit{r}{}quits the application.
             """.format(
                     spaces[len('scan (--range [IP range])'):],
                     spaces[len('hosts'):],
@@ -263,10 +270,15 @@ class MainMenu(CommandMenu):
                     spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('add [IP] (--mac [MAC])'):],
                     spaces[len('clear'):],
+                    spaces[len('quit'):],
                     y=IO.Fore.LIGHTYELLOW_EX, r=IO.Style.RESET_ALL, b=IO.Style.BRIGHT,
                     s=spaces
                 )
         )
+
+    def _quit_handler(self, args):
+        self.interrupt_handler(False)
+        self.stop()
 
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
