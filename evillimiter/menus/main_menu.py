@@ -17,9 +17,11 @@ class MainMenu(CommandMenu):
     def __init__(self, version, interface, gateway_ip, gateway_mac, netmask):
         super().__init__()
         self.prompt = '({}Main{}) >>> '.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
-        self.parser.add_subparser('scan', self._scan_handler)
         self.parser.add_subparser('hosts', self._hosts_handler)
         self.parser.add_subparser('clear', self._clear_handler)
+
+        scan_parser = self.parser.add_subparser('scan', self._scan_handler)
+        scan_parser.add_parameterized_flag('--range', 'iprange')
 
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
@@ -45,7 +47,7 @@ class MainMenu(CommandMenu):
         self.netmask = netmask
 
         # range of IP address calculated from gateway IP and netmask
-        self.iprange = [str(x) for x in netaddr.IPNetwork('{}/{}'.format(self.gateway_ip, self.netmask))]
+        self.iprange = list(netaddr.IPNetwork('{}/{}'.format(self.gateway_ip, self.netmask)))
 
         self.host_scanner = HostScanner(self.interface, self.iprange)
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
@@ -72,12 +74,24 @@ class MainMenu(CommandMenu):
         Handles 'scan' command-line argument
         (Re)scans for hosts on the network
         """
+        if args.iprange:
+            try:
+                if '-' in args.iprange:
+                    iprange = list(netaddr.iter_iprange(*args.iprange.split('-')))
+                else:
+                    iprange = list(netaddr.IPNetwork(args.iprange))
+            except netaddr.core.AddrFormatError:
+                IO.error('ip range invalid.')
+                return
+        else:
+            iprange = None
+
         for host in self.hosts:
             self._free_host(host)
             
         IO.spacer()
 
-        self.hosts = self.host_scanner.scan()
+        self.hosts = self.host_scanner.scan(iprange)
 
         IO.ok('{}{}{} hosts discovered.'.format(IO.Fore.LIGHTYELLOW_EX, len(self.hosts), IO.Style.RESET_ALL))
         IO.spacer()
@@ -213,8 +227,11 @@ class MainMenu(CommandMenu):
 
         IO.print(
             """
-{y}scan{r}{}scans for online hosts on your network.
+{y}scan (--range [IP range]){r}{}scans for online hosts on your network.
 {s}required to find the hosts you want to limit.
+{b}{s}e.g.: scan
+{s}      scan --range 192.168.178.1-192.168.178.50
+{s}      scan --range 192.168.178.1/24{r}
 
 {y}hosts{r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
@@ -239,7 +256,7 @@ class MainMenu(CommandMenu):
 
 {y}clear{r}{}clears the terminal window.
             """.format(
-                    spaces[len('scan'):],
+                    spaces[len('scan (--range [IP range])'):],
                     spaces[len('hosts'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('block [ID1,ID2,...]'):],

@@ -18,12 +18,13 @@ class HostScanner(object):
         self.retries = 0        # ARP retry
         self.timeout = 2.5      # time in s to wait for an answer
 
-    def scan(self):
+    def scan(self, iprange=None):
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             hosts = []
+            iprange = [str(x) for x in (self.iprange if iprange is None else iprange)]
             iterator = tqdm(
-                iterable=executor.map(self._sweep, self.iprange),
-                total=len(self.iprange),
+                iterable=executor.map(self._sweep, iprange),
+                total=len(iprange),
                 ncols=45,
                 bar_format='{percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt}'
             )
