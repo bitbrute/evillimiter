@@ -1,5 +1,12 @@
 [ CHANGELOG ]
 
+[ v1.2.0 ]
+- Specify a range when scanning for hosts (e.g.: scan --range 10.0.0.1-10.0.0.20)
+- Set the gateway MAC manually, if not resolved automatically (e.g.: -m fc:fb:23:dd:ac:63)
+- Quit the application using 'quit' or 'exit' command
+- Fix cleanup bug
+- Fix error when binaries are not in /sbin
+
 [ v1.1.0 ]
 - Manually add customized hosts using 'add' command (e.g.: add 192.168.178.24 --mac fc:fb:23:dd:ac:63)
 - Multiple host selection using a comma separated IDs (e.g.: 6,3,5)
