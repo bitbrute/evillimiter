@@ -39,7 +39,8 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | -------- | ----------- |
 | ```-h``` | Displays help message listing all command-line arguments |
 | ```-i [Interface Name]``` | Specifies network interface (resolved if not specified)|
-| ```-g [Gateway Address]``` | Specifies gateway IP address (resolved if not specified)|
+| ```-g [Gateway IP Address]``` | Specifies gateway IP address (resolved if not specified)|
+| ```-m [Gateway MAC Address]``` | Specifies gateway MAC address (resolved if not specified)|
 | ```-n [Netmask Address]``` | Specifies netmask (resolved if not specified)|
 | ```-f``` | Flushes current iptables and tc configuration. Ensures that packets are dealt with correctly.|
 | ```--colorless``` | Disables colored output |

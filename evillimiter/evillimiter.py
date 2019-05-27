@@ -51,7 +51,8 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description=get_description())
     parser.add_argument('-i', '--interface', help='network interface connected to the target network. automatically resolved if not specified.')
-    parser.add_argument('-g', '--gateway', help='default gateway address. automatically resolved if not specified.')
+    parser.add_argument('-g', '--gateway-ip', dest='gateway_ip', help='default gateway ip address. automatically resolved if not specified.')
+    parser.add_argument('-m', '--gateway-mac', dest='gateway_mac', help='gateway mac address. automatically resolved if not specified.')
     parser.add_argument('-n', '--netmask', help='netmask for the network. automatically resolved if not specified.')
     parser.add_argument('-f', '--flush', action='store_true', help='flush current iptables (firewall) and tc (traffic control) settings.')
     parser.add_argument('--colorless', action='store_true', help='disable colored output.')
@@ -78,20 +79,27 @@ def process_arguments(args):
 
     IO.ok('interface: {}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, interface, IO.Style.RESET_ALL))
 
-    if args.gateway is None:
+    if args.gateway_ip is None:
         gateway_ip = netutils.get_default_gateway()
         if gateway_ip is None:
             IO.error('default gateway address could not be resolved. specify manually (-g).')
             return
     else:
-        gateway_ip = args.gateway
+        gateway_ip = args.gateway_ip
 
     IO.ok('gateway ip: {}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, gateway_ip, IO.Style.RESET_ALL))
 
-    gateway_mac = netutils.get_mac_by_ip(interface, gateway_ip)
-    if gateway_mac is None:
-        IO.error('gateway mac address could not be resolved.')
-        return
+    if args.gateway_mac is None:
+        gateway_mac = netutils.get_mac_by_ip(interface, gateway_ip)
+        if gateway_mac is None:
+            IO.error('gateway mac address could not be resolved.')
+            return
+    else:
+        if netutils.validate_mac_address(args.gateway_mac):
+            gateway_mac = args.gateway_mac.lower()
+        else:
+            IO.error('gateway mac is invalid.')
+            return
 
     IO.ok('gateway mac: {}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, gateway_mac, IO.Style.RESET_ALL))
 
