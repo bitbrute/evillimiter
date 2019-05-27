@@ -165,8 +165,7 @@ def run():
         IO.spacer()        
         menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask)
         menu.start()
-
-    cleanup(args.interface)
+        cleanup(args.interface)
 
 
 if __name__ == '__main__':
