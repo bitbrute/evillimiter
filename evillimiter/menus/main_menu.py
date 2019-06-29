@@ -304,7 +304,8 @@ class MainMenu(CommandMenu):
                 for host in self.hosts:
                     if host.mac == id_ or host.ip == id_:
                         found = True
-                        hosts.append(host)
+                        if host not in hosts:
+                            hosts.append(host)
                         break
                 if found == False:
                     IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
