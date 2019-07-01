@@ -288,7 +288,7 @@ class MainMenu(CommandMenu):
             return self.hosts.copy()
 
         ids = ids_string.split(',')
-        hosts = []
+        hosts = set()
 
         for id_ in ids:
             is_mac = netutils.validate_mac_address(id_)
@@ -302,12 +302,11 @@ class MainMenu(CommandMenu):
             if is_mac or is_ip:
                 found = False
                 for host in self.hosts:
-                    if host.mac == id_ or host.ip == id_:
+                    if host.mac == id_.lower() or host.ip == id_:
                         found = True
-                        if host not in hosts:
-                            hosts.append(host)
+                        hosts.add(host)
                         break
-                if found == False:
+                if not found:
                     IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
                     return
             else:
@@ -315,8 +314,7 @@ class MainMenu(CommandMenu):
                 if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
                     IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
                     return
-                if self.hosts[id_] not in hosts:
-                    hosts.append(self.hosts[id_])
+                hosts.add(self.hosts[id_])
 
         return hosts
 
