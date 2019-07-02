@@ -287,20 +287,34 @@ class MainMenu(CommandMenu):
         if ids_string == 'all':
             return self.hosts.copy()
 
-        try:
-            ids = [int(x) for x in ids_string.split(',')]
-        except ValueError:
-            IO.error('\'{}\' are invalid IDs.'.format(ids_string))
-            return
-
-        hosts = []
+        ids = ids_string.split(',')
+        hosts = set()
 
         for id_ in ids:
-            if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
-                IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+            is_mac = netutils.validate_mac_address(id_)
+            is_ip = netutils.validate_ip_address(id_)
+            is_id_ = id_.isdigit()
+
+            if not is_mac and not is_ip and not is_id_:
+                IO.error('invalid identifier(s): \'{}\'.'.format(ids_string))
                 return
-            if self.hosts[id_] not in hosts:
-                hosts.append(self.hosts[id_])
+
+            if is_mac or is_ip:
+                found = False
+                for host in self.hosts:
+                    if host.mac == id_.lower() or host.ip == id_:
+                        found = True
+                        hosts.add(host)
+                        break
+                if not found:
+                    IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                    return
+            else:
+                id_ = int(id_)
+                if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
+                    IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                    return
+                hosts.add(self.hosts[id_])
 
         return hosts
 
