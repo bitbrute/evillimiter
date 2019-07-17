@@ -1,7 +1,7 @@
 import re
 import colorama
 
-from . import shell
+import shell
 
 
 class IO(object):
