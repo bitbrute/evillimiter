@@ -1,6 +1,6 @@
 import os
 import re
-from setuptools import setup, find_packages, Command
+from setup import setup, find_packages, Command
 
 
 
