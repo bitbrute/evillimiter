@@ -8,7 +8,7 @@ from .menu import CommandMenu
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
-from evillimiter.networking.limiter import Limiter
+from evillimiter.networking.limiter import Limiter, Direction, NetRate
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.scan import HostScanner
 
@@ -26,9 +26,13 @@ class MainMenu(CommandMenu):
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
         limit_parser.add_parameter('rate')
+        limit_parser.add_flag('--upload', 'upload')
+        limit_parser.add_flag('--download', 'download')
 
         block_parser = self.parser.add_subparser('block', self._block_handler)
         block_parser.add_parameter('id')
+        block_parser.add_flag('--upload', 'upload')
+        block_parser.add_flag('--download', 'download')
 
         free_parser = self.parser.add_subparser('free', self._free_handler)
         free_parser.add_parameter('id')
@@ -139,20 +143,20 @@ class MainMenu(CommandMenu):
         Limits bandwith of host to specified rate
         """
         hosts = self._get_hosts_by_ids(args.id)
-        rate = args.rate
+        rate = NetRate(args.rate)
+        direction = self._parse_direction_args(args)
+
+        if not rate.is_valid():
+            IO.error('limit rate is invalid.')
+            return
 
         if hosts is not None and len(hosts) > 0:
             for host in hosts:
                 if not host.spoofed:
                     self.arp_spoofer.add(host)
-
-                if netutils.validate_netrate_string(rate):
-                    self.limiter.limit(host, rate)
-                else:
-                    IO.error('limit rate is invalid.')
-                    return
+                self.limiter.limit(host, direction, rate)
                 
-                IO.ok('{}{}{} limited{} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL, rate))
+                IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
 
     def _block_handler(self, args):
         """
@@ -160,13 +164,15 @@ class MainMenu(CommandMenu):
         Blocks internet communication for host
         """
         hosts = self._get_hosts_by_ids(args.id)
+        direction = self._parse_direction_args(args)
+
         if hosts is not None and len(hosts) > 0:
             for host in hosts:
                 if not host.spoofed:
                     self.arp_spoofer.add(host)
 
-                self.limiter.block(host)
-                IO.ok('{}{}{} blocked{}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Fore.RED, IO.Style.RESET_ALL))
+                self.limiter.block(host, direction)
+                IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
         """
@@ -228,7 +234,7 @@ class MainMenu(CommandMenu):
         Handles 'help' command-line argument
         Prints help message including commands and usage
         """
-        spaces = ' ' * 30
+        spaces = ' ' * 33
 
         IO.print(
             """
@@ -242,13 +248,13 @@ class MainMenu(CommandMenu):
 {s}contains host information, including IDs.
 
 {y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
-{b}{s}e.g.: limit 4 100kbit
-{s}      limit 2,3,4 1gbit
-{s}      limit all 200kbit{r}
+{y}      (--upload) (--download){r}{}{b}e.g.: limit 4 100kbit
+{s}      limit 2,3,4 1gbit --download
+{s}      limit all 200kbit --upload{r}
 
 {y}block [ID1,ID2,...]{r}{}blocks internet access of host(s).
-{b}{s}e.g.: block 3,2
-{s}      block all{r}
+{y}      (--upload) (--download){r}{}{b}e.g.: block 3,2
+{s}      block all --upload{r}
 
 {y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
 {b}{s}e.g.: free 3
@@ -266,7 +272,9 @@ class MainMenu(CommandMenu):
                     spaces[len('scan (--range [IP range])'):],
                     spaces[len('hosts'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
+                    spaces[len('      (--upload) (--download)'):],
                     spaces[len('block [ID1,ID2,...]'):],
+                    spaces[len('      (--upload) (--download)'):],
                     spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('add [IP] (--mac [MAC])'):],
                     spaces[len('clear'):],
@@ -318,11 +326,21 @@ class MainMenu(CommandMenu):
 
         return hosts
 
+    def _parse_direction_args(self, args):
+        direction = Direction.NONE
+
+        if args.upload:
+            direction |= Direction.OUTGOING
+        if args.download:
+            direction |= Direction.INCOMING
+
+        return Direction.BOTH if direction == Direction.NONE else direction
+
     def _free_host(self, host):
         """
         Stops ARP spoofing and unlimits host
         """
         if host.spoofed:
             self.arp_spoofer.remove(host)
-            self.limiter.unlimit(host)
+            self.limiter.unlimit(host, Direction.BOTH)
             IO.ok('{}{}{} freed.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Style.RESET_ALL))

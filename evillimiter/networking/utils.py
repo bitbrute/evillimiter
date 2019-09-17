@@ -73,24 +73,6 @@ def flush_network_settings(interface):
     shell.execute_suppressed('{} qdisc del dev {} root'.format(BIN_TC, interface))
 
 
-def validate_netrate_string(string):
-    """
-    Checks if a given net rate string is valid, e.g. 100kbit
-    """
-    number = 0  # rate number
-    offset = 0  # string offset
-
-    for c in string:
-        if c.isdigit():
-            number = number * 10 + int(c)
-            offset += 1
-        else:
-            break
-
-    # if offset = 0, number is missing
-    return offset > 0 and string[offset:] in ('bit', 'kbit', 'mbit', 'gbit', 'tbit')
-
-
 def validate_ip_address(ip):
     return re.match(r'^(\d{1,3}\.){3}(\d{1,3})$', ip) is not None
 
