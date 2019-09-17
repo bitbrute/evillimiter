@@ -9,7 +9,10 @@
 [![Open Source Love](https://badges.frapsoft.com/os/v3/open-source.svg?v=102)](https://github.com/ellerbrock/open-source-badge/)
 
 A tool to limit the bandwidth (upload/download) of devices connected to your network without physical or administrative access.<br>
-```evillimiter``` employs [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) and [traffic shaping](https://en.wikipedia.org/wiki/Traffic_shaping) to throttle the bandwidth of hosts on the network. This is explained in detail below.
+```evillimiter``` employs [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) and [traffic shaping](https://en.wikipedia.org/wiki/Traffic_shaping) to throttle the bandwidth of hosts on the network.
+
+**Searching for a Windows-compatible version?**<br>
+Check out the open-source alternative [EvilLimiter for Windows](https://github.com/bitbrute/evillimiter-windows).
 
 ## Requirements
 - Linux distribution
@@ -49,10 +52,10 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 
 | Command | Explanation |
 | ------- | ----------- |
-| ```scan (--range [IP Range])``` | Scans your network for online hosts. One of the first things to do after start. For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
-| ```hosts``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.
-| ```limit [ID1,ID2,...] [Rate]``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```, ```tbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
-| ```block [ID1,ID2,...]``` | Blocks internet connection of host(s) associated to specified ID.
+| ```scan (--range [IP Range])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
+| ```hosts (--force)``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.<br>```--force``` forces the table to be shown, even when it doesn't fit the terminal.
+| ```limit [ID1,ID2,...] [Rate] (--upload) (--download)``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>```--upload``` limits outgoing traffic only.<br>```--download``` limits incoming traffic only.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
+| ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
 | ```clear``` | Clears the terminal window.
