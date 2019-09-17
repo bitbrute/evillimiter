@@ -1,5 +1,11 @@
 [ CHANGELOG ]
 
+[ v1.3.0 ]
+- Possibility to differentiate between upload / download limit (e.g.: limit 0 250kbit --download)
+- Allow referencing hosts by IP/MAC address
+- Updated tc (traffic control) settings: burst / ceil configuration
+- Force hosts table to be displayed even when it doesn't fit the terminal (hosts --force)
+
 [ v1.2.0 ]
 - Specify a range when scanning for hosts (e.g.: scan --range 10.0.0.1-10.0.0.20)
 - Set the gateway MAC manually, if not resolved automatically (e.g.: -m fc:fb:23:dd:ac:63)
