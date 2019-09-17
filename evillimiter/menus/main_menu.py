@@ -17,8 +17,10 @@ class MainMenu(CommandMenu):
     def __init__(self, version, interface, gateway_ip, gateway_mac, netmask):
         super().__init__()
         self.prompt = '({}Main{}) >>> '.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
-        self.parser.add_subparser('hosts', self._hosts_handler)
         self.parser.add_subparser('clear', self._clear_handler)
+
+        hosts_parser = self.parser.add_subparser('hosts', self._hosts_handler)
+        hosts_parser.add_flag('--force', 'force')
 
         scan_parser = self.parser.add_subparser('scan', self._scan_handler)
         scan_parser.add_parameterized_flag('--range', 'iprange')
@@ -129,8 +131,8 @@ class MainMenu(CommandMenu):
 
         table = SingleTable(table_data, 'Hosts')
 
-        if not table.ok:
-            IO.error('table does not fit terminal. resize or decrease font size.')
+        if not args.force and not table.ok:
+            IO.error('table does not fit terminal. resize or decrease font size. you can also force the display (--force).')
             return
 
         IO.spacer()
@@ -244,7 +246,7 @@ class MainMenu(CommandMenu):
 {s}      scan --range 192.168.178.1-192.168.178.50
 {s}      scan --range 192.168.178.1/24{r}
 
-{y}hosts{r}{}lists all scanned hosts.
+{y}hosts (--force){r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
 
 {y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
@@ -270,7 +272,7 @@ class MainMenu(CommandMenu):
 {y}quit{r}{}quits the application.
             """.format(
                     spaces[len('scan (--range [IP range])'):],
-                    spaces[len('hosts'):],
+                    spaces[len('hosts (--force)'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('      (--upload) (--download)'):],
                     spaces[len('block [ID1,ID2,...]'):],
