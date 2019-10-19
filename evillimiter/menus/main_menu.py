@@ -8,7 +8,7 @@ from .menu import CommandMenu
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
-from evillimiter.networking.limiter import Limiter, Direction, NetRate
+from evillimiter.networking.limit import Limiter, Direction, NetRate
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.scan import HostScanner
 

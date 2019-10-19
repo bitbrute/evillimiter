@@ -15,4 +15,5 @@ eggs/
 *.code-workspace
 
 # Other
+_*
 TODO
