@@ -1,5 +1,9 @@
 [ CHANGELOG ]
 
+[ v1.4.0 ]
+- Bandwidth usage can now be monitored with (e.g.: monitor --interval 2000)
+- Fix coding/naming convention issues
+
 [ v1.3.0 ]
 - Possibility to differentiate between upload / download limit (e.g.: limit 0 250kbit --download)
 - Allow referencing hosts by IP/MAC address
