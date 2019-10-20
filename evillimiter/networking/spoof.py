@@ -20,22 +20,20 @@ class ARPSpoofer(object):
         self._running = False
 
     def add(self, host):
-        self._hosts_lock.acquire()
-        self._hosts.add(host)
-        self._hosts_lock.release()
+        with self._hosts_lock:
+            self._hosts.add(host)
 
         host.spoofed = True
 
     def remove(self, host):             
-        self._hosts_lock.acquire()
-        self._hosts.discard(host)
-        self._hosts_lock.release()
+        with self._hosts_lock:
+            self._hosts.discard(host)
 
         self._restore(host)
         host.spoofed = False
 
     def start(self):
-        thread = threading.Thread(target=self._spoof, args=[])
+        thread = threading.Thread(target=self._spoof, args=[], daemon=True)
 
         self._running = True
         thread.start()

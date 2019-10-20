@@ -1,16 +1,20 @@
+import time
 import socket
+import curses
 import netaddr
 import collections
 from terminaltables import SingleTable
 
 import evillimiter.networking.utils as netutils
 from .menu import CommandMenu
+from evillimiter.networking.utils import BitRate
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
-from evillimiter.networking.limit import Limiter, Direction, NetRate
+from evillimiter.networking.limit import Limiter, Direction
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.scan import HostScanner
+from evillimiter.networking.monitor import BandwidthMonitor
 
 
 class MainMenu(CommandMenu):
@@ -43,6 +47,9 @@ class MainMenu(CommandMenu):
         add_parser.add_parameter('ip')
         add_parser.add_parameterized_flag('--mac', 'mac')
 
+        monitor_parser = self.parser.add_subparser('monitor', self._monitor_handler)
+        monitor_parser.add_parameterized_flag('--interval', 'interval')
+
         self.parser.add_subparser('help', self._help_handler)
         self.parser.add_subparser('?', self._help_handler)
 
@@ -61,6 +68,7 @@ class MainMenu(CommandMenu):
         self.host_scanner = HostScanner(self.interface, self.iprange)
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.limiter = Limiter(self.interface)
+        self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
 
         # holds discovered hosts
         self.hosts = []
@@ -69,6 +77,8 @@ class MainMenu(CommandMenu):
 
         # start the spoof thread
         self.arp_spoofer.start()
+        # start the bandwidth monitor thread
+        self.bandwidth_monitor.start()
 
     def interrupt_handler(self, ctrl_c=True):
         if ctrl_c:
@@ -77,6 +87,8 @@ class MainMenu(CommandMenu):
         IO.ok('cleaning up... stand by...')
 
         self.arp_spoofer.stop()
+        self.bandwidth_monitor.stop()
+
         for host in self.hosts:
             self._free_host(host)
 
@@ -125,7 +137,7 @@ class MainMenu(CommandMenu):
                 '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, i, IO.Style.RESET_ALL),
                 host.ip,
                 host.mac,
-                host.name if host.name is not None else '',
+                host.name,
                 host.pretty_status()
             ])
 
@@ -145,19 +157,22 @@ class MainMenu(CommandMenu):
         Limits bandwith of host to specified rate
         """
         hosts = self._get_hosts_by_ids(args.id)
-        rate = NetRate(args.rate)
-        direction = self._parse_direction_args(args)
 
-        if not rate.is_valid():
+        try:
+            rate = BitRate.from_rate_string(args.rate)
+        except Exception:
             IO.error('limit rate is invalid.')
             return
+
+        direction = self._parse_direction_args(args)
 
         if hosts is not None and len(hosts) > 0:
             for host in hosts:
                 if not host.spoofed:
                     self.arp_spoofer.add(host)
+
                 self.limiter.limit(host, direction, rate)
-                
+                self.bandwidth_monitor.add(host)
                 IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
 
     def _block_handler(self, args):
@@ -174,6 +189,7 @@ class MainMenu(CommandMenu):
                     self.arp_spoofer.add(host)
 
                 self.limiter.block(host, direction)
+                self.bandwidth_monitor.add(host)
                 IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
@@ -220,7 +236,85 @@ class MainMenu(CommandMenu):
             return
 
         self.hosts.append(host)   
-        IO.ok('host added.') 
+        IO.ok('host added.')
+
+    def _monitor_handler(self, args):
+        """
+        Handles 'monitor' command-line argument
+        Monitors hosts bandwidth usage
+        """
+        def get_bandwidth_results():
+            return [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None]
+
+        def display(stdscr, interval):
+            host_results = get_bandwidth_results()
+            hname_max_len = max([len(x[0].name) for x in host_results])
+
+            header_off = [
+                ('ID', 5), ('IP-Address', 18), ('Hostname', hname_max_len + 2),
+                ('Current (per s)', 20), ('Total', 16), ('Packets', 0)
+            ]
+
+            y_rst = 1
+            x_rst = 2
+
+            while True:
+                y_off = y_rst
+                x_off = x_rst
+
+                stdscr.clear()
+
+                for header in header_off:
+                    stdscr.addstr(y_off, x_off, header[0])
+                    x_off += header[1]
+
+                y_off += 2
+                x_off = x_rst
+
+                for i, (host, result) in enumerate(host_results):
+                    result_data = [
+                        str(i),
+                        host.ip,
+                        host.name,
+                        '{}↑ {}↓'.format(result.upload_rate, result.download_rate),
+                        '{}↑ {}↓'.format(result.upload_total_size, result.download_total_size),
+                        '{}↑ {}↓'.format(result.upload_total_count, result.download_total_count)
+                    ]
+
+                    for j, string in enumerate(result_data):
+                        stdscr.addstr(y_off, x_off, string)
+                        x_off += header_off[j][1]
+
+                    y_off += 1
+                    x_off = x_rst
+
+                y_off += 2
+                stdscr.addstr(y_off, x_off, 'press \'ctrl+c\' to exit.')
+
+                try:
+                    stdscr.refresh()
+                    time.sleep(interval)
+                    host_results = get_bandwidth_results()
+                except KeyboardInterrupt:
+                    return
+                    
+
+        interval = 0.5  # in s
+        if args.interval:
+            if not args.interval.isdigit():
+                IO.error('invalid interval.')
+                return
+
+            interval = int(args.interval) / 1000    # from ms to s
+
+        if len(get_bandwidth_results()) == 0:
+            IO.error('no hosts to be monitored.')
+            return
+
+        try:
+            curses.wrapper(display, interval)
+        except curses.error:
+            IO.error('monitor error occurred. maybe terminal too small?')
 
     def _clear_handler(self, args):
         """
@@ -236,7 +330,7 @@ class MainMenu(CommandMenu):
         Handles 'help' command-line argument
         Prints help message including commands and usage
         """
-        spaces = ' ' * 33
+        spaces = ' ' * 35
 
         IO.print(
             """
@@ -267,6 +361,9 @@ class MainMenu(CommandMenu):
 {b}{s}e.g.: add 192.168.178.24
 {s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
 
+{y}monitor (--interval [time in ms]){r}{}monitors bandwidth usage of limited hosts.
+{b}{s}e.g.: monitor --interval 600{r}
+
 {y}clear{r}{}clears the terminal window.
 
 {y}quit{r}{}quits the application.
@@ -279,6 +376,7 @@ class MainMenu(CommandMenu):
                     spaces[len('      (--upload) (--download)'):],
                     spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('add [IP] (--mac [MAC])'):],
+                    spaces[len('monitor (--interval [time in ms])'):],
                     spaces[len('clear'):],
                     spaces[len('quit'):],
                     y=IO.Fore.LIGHTYELLOW_EX, r=IO.Style.RESET_ALL, b=IO.Style.BRIGHT,
@@ -345,4 +443,5 @@ class MainMenu(CommandMenu):
         if host.spoofed:
             self.arp_spoofer.remove(host)
             self.limiter.unlimit(host, Direction.BOTH)
+            self.bandwidth_monitor.remove(host)
             IO.ok('{}{}{} freed.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, IO.Style.RESET_ALL))

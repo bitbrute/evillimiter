@@ -49,11 +49,11 @@ class HostScanner(object):
         
         if answer is not None:
             mac = answer.hwsrc
-            name = None
+            name = ''
 
             try:
                 host_info = socket.gethostbyaddr(ip)
-                name = None if host_info is None else host_info[0]
+                name = '' if host_info is None else host_info[0]
             except socket.herror:
                 pass
 

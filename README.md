@@ -58,6 +58,7 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
+| ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of limited hosts (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval in milliseconds after bandwidth information get refreshed (default 500ms)<br>For example: monitor --interval 1000
 | ```clear``` | Clears the terminal window.
 | ```quit``` | Quits the application.
 | ```?```, ```help``` | Displays command information similar to this one.
