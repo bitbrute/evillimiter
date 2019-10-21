@@ -11,7 +11,7 @@ class Host(object):
         self.blocked = False
 
     def __eq__(self, other):
-        return self.mac == other.mac or self.ip == other.ip
+        return self.ip == other.ip
 
     def __hash__(self):
         return hash((self.mac, self.ip))

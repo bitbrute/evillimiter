@@ -138,7 +138,7 @@ class BitRate(object):
                 raise Exception('Bitrate limit exceeded')
 
     def __mul__(self, other):
-        if other is BitRate:
+        if isinstance(other, BitRate):
             return BitRate(int(self.rate * other.rate))
         return BitRate(int(self.rate * other))
 
@@ -216,17 +216,22 @@ class ByteValue(object):
         return self.value
 
     def __add__(self, other):
-        if other is ByteValue:
+        if isinstance(other, ByteValue):
             return ByteValue(int(self.value + other.value))
         return ByteValue(int(self.value + other))
 
+    def __sub__(self, other):
+        if isinstance(other, ByteValue):
+            return ByteValue(int(self.value - other.value))
+        return ByteValue(int(self.value - other))
+
     def __mul__(self, other):
-        if other is ByteValue:
+        if isinstance(other, ByteValue):
             return ByteValue(int(self.value * other.value))
         return ByteValue(int(self.value * other))
 
     def __ge__(self, other):
-        if other is ByteValue:
+        if isinstance(other, ByteValue):
             return self.value >= other.value
         return self.value >= other
 

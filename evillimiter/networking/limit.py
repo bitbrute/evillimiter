@@ -52,6 +52,9 @@ class Limiter(object):
         self.host_ids_dict[host] = host_ids
 
     def unlimit(self, host, direction):
+        if not host.limited:
+            return
+            
         host_ids = self.host_ids_dict[host]
 
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
