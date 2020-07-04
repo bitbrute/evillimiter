@@ -19,6 +19,8 @@ class HostScanner(object):
         self.timeout = 2.5      # time in s to wait for an answer
 
     def scan(self, iprange=None):
+        self._resolve_names = True
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             hosts = []
             iprange = [str(x) for x in (self.iprange if iprange is None else iprange)]
@@ -32,12 +34,36 @@ class HostScanner(object):
             try:
                 for host in iterator:
                     if host is not None:
+                        try:
+                            host_info = socket.gethostbyaddr(host.ip)
+                            name = '' if host_info is None else host_info[0]
+                            host.name = name
+                        except socket.herror:
+                            pass
+
                         hosts.append(host)
             except KeyboardInterrupt:
                 iterator.close()
                 IO.ok('aborted. waiting for shutdown...')
 
             return hosts
+
+    def scan_for_reconnects(self, hosts, iprange=None):
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            scanned_hosts = []
+            iprange = [str(x) for x in (self.iprange if iprange is None else iprange)]
+            for host in executor.map(self._sweep, iprange):
+                if host is not None:
+                    scanned_hosts.append(host)
+
+            reconnected_hosts = {}
+            for host in hosts:
+                for s_host in scanned_hosts:
+                    if host.mac == s_host.mac and host.ip != s_host.ip:
+                        s_host.name = host.name
+                        reconnected_hosts[host] = s_host
+            
+            return reconnected_hosts
 
     def _sweep(self, ip):
         """
@@ -48,13 +74,4 @@ class HostScanner(object):
         answer = sr1(packet, retry=self.retries, timeout=self.timeout, verbose=0, iface=self.interface)
         
         if answer is not None:
-            mac = answer.hwsrc
-            name = ''
-
-            try:
-                host_info = socket.gethostbyaddr(ip)
-                name = '' if host_info is None else host_info[0]
-            except socket.herror:
-                pass
-
-            return Host(ip, mac, name)
+            return Host(ip, answer.hwsrc, '')

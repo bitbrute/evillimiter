@@ -9,13 +9,14 @@ class Host(object):
         self.spoofed = False
         self.limited = False
         self.blocked = False
+        self.watched = False
 
     def __eq__(self, other):
         return self.ip == other.ip
 
     def __hash__(self):
         return hash((self.mac, self.ip))
-        
+
     def pretty_status(self):
         if self.limited:
             return '{}Limited{}'.format(IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL)
