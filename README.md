@@ -79,3 +79,9 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 
 Copyright (c) 2019 by [bitbrute](https://github.com/bitbrute). Some rights reserved.<br>
 [Evil Limiter](https://github.com/bitbrute/evillimiter) is licensed under the MIT License as stated in the [LICENSE file](LICENSE).
+
+## Donation
+You like my projects? Feel free to help me pay off my incredibly overprized Mercedes VIP leasing contract. <3
+
+BTC: 16oNzE8Vkcz8YQfnHF4g19moN3E6wc8E31<br>
+ETH: 0xB08D257cf5B76dB0D2fBAd1E68f52b9cCE3581e3
