@@ -52,7 +52,7 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 
 | Command | Explanation |
 | ------- | ----------- |
-| ```scan (--range [IP Range])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
+| ```scan (--range [IP Range]) (--intensity [(1,2,3)])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>```--intensity``` lets you specify the scan intensity / speed (```1``` = quick, ```2``` = normal (standard), ```3``` = intense).<br>For example: ```scan --range 192.168.178.1-192.168.178.40 --intensity 1``` or just ```scan``` to scan the entire subnet with the standard intensity.
 | ```hosts (--force)``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.<br>```--force``` forces the table to be shown, even when it doesn't fit the terminal.
 | ```limit [ID1,ID2,...] [Rate] (--upload) (--download)``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>```--upload``` limits outgoing traffic only.<br>```--download``` limits incoming traffic only.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
 | ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.

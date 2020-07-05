@@ -15,7 +15,7 @@ from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Limiter, Direction
 from evillimiter.networking.spoof import ARPSpoofer
-from evillimiter.networking.scan import HostScanner
+from evillimiter.networking.scan import HostScanner, ScanIntensity
 from evillimiter.networking.monitor import BandwidthMonitor
 from evillimiter.networking.watch import HostWatcher
 
@@ -31,6 +31,7 @@ class MainMenu(CommandMenu):
 
         scan_parser = self.parser.add_subparser('scan', self._scan_handler)
         scan_parser.add_parameterized_flag('--range', 'iprange')
+        scan_parser.add_parameterized_flag('--intensity', 'intensity')
 
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
@@ -85,7 +86,7 @@ class MainMenu(CommandMenu):
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.limiter = Limiter(self.interface)
         self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
-        self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
+        self.host_watcher = HostWatcher(self.interface, self.iprange, self._reconnect_callback)
 
         # holds discovered hosts
         self.hosts = []
@@ -124,6 +125,16 @@ class MainMenu(CommandMenu):
                 return
         else:
             iprange = None
+
+        if args.intensity:
+            intensity = self._parse_scan_intensity(args.intensity)
+            if intensity is None:
+                IO.error('invalid intensity level.')
+                return
+        else:
+            intensity = ScanIntensity.NORMAL
+
+        self.host_scanner.set_intensity(intensity)
 
         with self.hosts_lock:
             for host in self.hosts:
@@ -439,6 +450,7 @@ class MainMenu(CommandMenu):
 
             iprange = self.host_watcher.iprange
             interval = self.host_watcher.interval
+            intensity = self.host_watcher.intensity
 
             set_table_data.append([
                 '{}range{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
@@ -448,6 +460,11 @@ class MainMenu(CommandMenu):
             set_table_data.append([
                 '{}interval{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
                 '{}s'.format(interval)
+            ])
+
+            set_table_data.append([
+                '{}intensity{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
+                intensity
             ])
 
             for host in self.host_watcher.hosts:
@@ -517,6 +534,12 @@ class MainMenu(CommandMenu):
                 self.host_watcher.interval = int(args.value)
             else:
                 IO.error('invalid interval.')
+        elif args.attribute.lower() in ('intensity', 'scan_intensity'):
+            intensity = self._parse_scan_intensity(args.value)
+            if intensity is not None:
+                self.host_watcher.intensity = intensity
+            else:
+                IO.error('invalid scan intensity level.')
         else:
             IO.error('{}{}{} is an invalid settings attribute.'.format(IO.Fore.LIGHTYELLOW_EX, args.attribute, IO.Style.RESET_ALL))
 
@@ -559,10 +582,10 @@ class MainMenu(CommandMenu):
         IO.print(
             """
 {y}scan (--range [IP range]){r}{}scans for online hosts on your network.
-{s}required to find the hosts you want to limit.
+{y}     (--intensity [(1,2,3)]){r}{}required to find the hosts you want to limit.
 {b}{s}e.g.: scan
 {s}      scan --range 192.168.178.1-192.168.178.50
-{s}      scan --range 192.168.178.1/24{r}
+{s}      scan --range 192.168.178.1/24 --intensity 3{r}
 
 {y}hosts (--force){r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
@@ -598,13 +621,15 @@ class MainMenu(CommandMenu):
 {y}watch remove [ID1,ID2,...]{r}{}removes host from the reconnection watchlist.
 {b}{s}e.g.: watch remove all{r}
 {y}watch set [attr] [value]{r}{}changes reconnect watch settings.
-{b}{s}e.g.: watch set interval 120{r}
+{b}{s}e.g.: watch set interval 120
+{s}      watch set intensity 1{r}
 
 {y}clear{r}{}clears the terminal window.
 
 {y}quit{r}{}quits the application.
             """.format(
                     spaces[len('scan (--range [IP range])'):],
+                    spaces[len('     (--intensity [(1,2,3)])'):],
                     spaces[len('hosts (--force)'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('      (--upload) (--download)'):],
@@ -704,6 +729,10 @@ class MainMenu(CommandMenu):
                 return list(netaddr.IPNetwork(range))
         except netaddr.core.AddrFormatError:
             return
+
+    def _parse_scan_intensity(self, value):
+        if value.isdigit() and int(value) in (ScanIntensity.QUICK, ScanIntensity.NORMAL, ScanIntensity.INTENSE):
+            return int(value)
 
     def _free_host(self, host):
         """

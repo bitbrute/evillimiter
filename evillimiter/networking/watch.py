@@ -1,16 +1,19 @@
 import time
 import threading
 
+from .scan import HostScanner, ScanIntensity
+
 
 class HostWatcher(object):
-    def __init__(self, host_scanner, reconnection_callback):
-        self._scanner = host_scanner
+    def __init__(self, interface, iprange, reconnection_callback):
+        self._scanner = HostScanner(interface, iprange)
         self._reconnection_callback = reconnection_callback
         self._hosts = set()
         self._hosts_lock = threading.Lock()
 
-        self._interval = 45     # scan interval in s
-        self._iprange = None    # custom ip range to be watched
+        self._interval = 45                     # scan interval in s
+        self._iprange = iprange                 # custom ip range to be watched
+        self._intensity = ScanIntensity.NORMAL  # scan intensity (speed)
         self._settings_lock = threading.Lock()
 
         self._log_list = []
@@ -37,6 +40,15 @@ class HostWatcher(object):
     def iprange(self, value):
         with self._settings_lock:
             self._iprange = value
+
+    @property
+    def intensity(self):
+        return self._intensity
+
+    @intensity.setter
+    def intensity(self, value):
+        self._scanner.set_intensity(value)
+        self._intensity = value
 
     @property
     def hosts(self):
