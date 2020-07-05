@@ -16,11 +16,3 @@ class Host(object):
 
     def __hash__(self):
         return hash((self.mac, self.ip))
-
-    def pretty_status(self):
-        if self.limited:
-            return '{}Limited{}'.format(IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL)
-        elif self.blocked:
-            return '{}Blocked{}'.format(IO.Fore.RED, IO.Style.RESET_ALL)
-        else:
-            return 'Free'

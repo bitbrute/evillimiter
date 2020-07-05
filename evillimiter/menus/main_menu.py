@@ -159,7 +159,7 @@ class MainMenu(CommandMenu):
                     host.ip,
                     host.mac,
                     host.name,
-                    host.pretty_status()
+                    self.limiter.pretty_status(host)
                 ])
 
         table = SingleTable(table_data, 'Hosts')
