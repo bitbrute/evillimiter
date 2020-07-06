@@ -113,7 +113,7 @@ class Limiter(object):
                 if dload is not None:
                     final += ' {}↓'.format(dload)
 
-                return '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, final, IO.Style.RESET_ALL)
+                return '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, final.strip(), IO.Style.RESET_ALL)
 
             else:
                 return '{}Free{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL)
