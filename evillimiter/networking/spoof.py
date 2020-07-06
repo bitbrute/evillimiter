@@ -25,11 +25,13 @@ class ARPSpoofer(object):
 
         host.spoofed = True
 
-    def remove(self, host):             
+    def remove(self, host, restore=True):             
         with self._hosts_lock:
             self._hosts.discard(host)
 
-        self._restore(host)
+        if restore:
+            self._restore(host)
+
         host.spoofed = False
 
     def start(self):

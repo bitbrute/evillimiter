@@ -1,6 +1,9 @@
+import threading
+
 import evillimiter.console.shell as shell
 from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
+from evillimiter.console.io import IO
 
 
 class Limiter(object):
@@ -11,7 +14,8 @@ class Limiter(object):
 
     def __init__(self, interface):
         self.interface = interface
-        self.host_ids_dict = {}
+        self._host_dict = {}
+        self._host_dict_lock = threading.Lock()
 
     def limit(self, host, direction, rate):
         """
@@ -36,7 +40,9 @@ class Limiter(object):
             shell.execute_suppressed('{} -t mangle -A PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, host_ids.download_id))
 
         host.limited = True
-        self.host_ids_dict[host] = host_ids
+
+        with self._host_dict_lock:
+            self._host_dict[host] = { 'ids': host_ids, 'rate': rate, 'direction': direction }
 
     def block(self, host, direction):
         host_ids = self._new_host_limit_ids(host, direction)
@@ -49,21 +55,68 @@ class Limiter(object):
             shell.execute_suppressed('{} -t filter -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
 
         host.blocked = True
-        self.host_ids_dict[host] = host_ids
+
+        with self._host_dict_lock:
+            self._host_dict[host] = { 'ids': host_ids, 'rate': None, 'direction': direction }
 
     def unlimit(self, host, direction):
-        host_ids = self.host_ids_dict[host]
+        if not host.limited and not host.blocked:
+            return
+            
+        with self._host_dict_lock:
+            host_ids = self._host_dict[host]['ids']
 
-        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            self._delete_tc_class(host_ids.upload_id)
-            self._delete_iptables_entries(host, direction, host_ids.upload_id)
-        if (direction & Direction.INCOMING) == Direction.INCOMING:
-            self._delete_tc_class(host_ids.download_id)
-            self._delete_iptables_entries(host, direction, host_ids.download_id)
+            if (direction & Direction.OUTGOING) == Direction.OUTGOING:
+                self._delete_tc_class(host_ids.upload_id)
+                self._delete_iptables_entries(host, direction, host_ids.upload_id)
+            if (direction & Direction.INCOMING) == Direction.INCOMING:
+                self._delete_tc_class(host_ids.download_id)
+                self._delete_iptables_entries(host, direction, host_ids.download_id)
 
-        del self.host_ids_dict[host]
+            del self._host_dict[host]
+
         host.limited = False
         host.blocked = False
+
+    def replace(self, old_host, new_host):
+        self._host_dict_lock.acquire()
+        info = self._host_dict[old_host] if old_host in self._host_dict else None
+        self._host_dict_lock.release()
+
+        if info is not None:
+            self.unlimit(old_host, Direction.BOTH)
+
+            if info['rate'] is None:
+                self.block(new_host, info['direction'])
+            else:
+                self.limit(new_host, info['direction'], info['rate'])
+
+    def pretty_status(self, host):
+        """
+        Gets the host limitation status in a formatted and colored string
+        """
+        with self._host_dict_lock:
+            if host in self._host_dict:
+                rate = self._host_dict[host]['rate']
+                direction = self._host_dict[host]['direction']
+                uload = None
+                dload = None
+                final = ''
+
+                if direction in (Direction.BOTH, Direction.OUTGOING):
+                    uload = '0bit' if rate is None else rate
+                if direction in (Direction.BOTH, Direction.INCOMING):
+                    dload = '0bit' if rate is None else rate
+
+                if uload is not None:
+                    final += '{}↑'.format(uload)
+                if dload is not None:
+                    final += ' {}↓'.format(dload)
+
+                return '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, final.strip(), IO.Style.RESET_ALL)
+
+            else:
+                return '{}Free{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL)
 
     def _new_host_limit_ids(self, host, direction):
         """
@@ -72,9 +125,13 @@ class Limiter(object):
         """
         host_ids = None
 
-        if host in self.host_ids_dict:
-            host_ids = self.host_ids_dict[host]
-            self.unlimit(host, direction)
+        self._host_dict_lock.acquire()
+        present = host in self._host_dict
+        self._host_dict_lock.release()
+
+        if present:
+                host_ids = self._host_dict[host]['ids']
+                self.unlimit(host, direction)
         
         return Limiter.HostLimitIDs(*self._create_ids()) if host_ids is None else host_ids
 
@@ -89,10 +146,13 @@ class Limiter(object):
             exc: IDs that will not be used (exceptions)
             """
             id_ = 1
-            while True:
-                if (id_ not in exc) and (id_ not in (x for y in self.host_ids_dict.values() for x in [y.upload_id, y.download_id])):
-                    return id_
-                else:
+            with self._host_dict_lock:
+                while True:
+                    if id_ not in exc:
+                        v = (x for x in self._host_dict.values())
+                        ids = (x['ids'] for x in v)
+                        if id_ not in (x for y in ids for x in [y.upload_id, y.download_id]):
+                            return id_
                     id_ += 1
 
         id1 = generate_id()

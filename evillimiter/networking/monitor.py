@@ -35,6 +35,12 @@ class BandwidthMonitor(object):
         with self._host_result_lock:
             self._host_result_dict.pop(host, None)
 
+    def replace(self, old_host, new_host):
+        with self._host_result_lock:
+            if old_host in self._host_result_dict:
+                self._host_result_dict[new_host] = self._host_result_dict[old_host]
+                del self._host_result_dict[old_host]
+
     def start(self):
         if self._running:
             return

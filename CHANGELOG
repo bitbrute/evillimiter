@@ -1,5 +1,13 @@
 [ CHANGELOG ]
 
+[ v1.5.0 ]
+- Added host bandwidth usage analysis without limiting (e.g.: analyze 2,3,4 --duration 120)
+- Added ability to detect host reconnections with different IP addresses (watch)
+- Updated description
+- Minor CLI text updates
+- Minor code refactoring
+- Minor thread safety improvements
+
 [ v1.4.0 ]
 - Bandwidth usage can now be monitored with (e.g.: monitor --interval 2000)
 - Fix coding/naming convention issues
