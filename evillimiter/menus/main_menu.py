@@ -52,6 +52,7 @@ class MainMenu(CommandMenu):
         add_parser.add_parameterized_flag('--mac', 'mac')
 
         monitor_parser = self.parser.add_subparser('monitor', self._monitor_handler)
+        monitor_parser.add_parameter('id')
         monitor_parser.add_parameterized_flag('--interval', 'interval')
 
         analyze_parser = self.parser.add_subparser('analyze', self._analyze_handler)
@@ -280,7 +281,10 @@ class MainMenu(CommandMenu):
         """
         def get_bandwidth_results():
             with self.hosts_lock:
-                return [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None]
+                return sorted(
+                    [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None],
+                    key=lambda h: not (h[0].limited or h[0].blocked)
+                )
 
         def display(stdscr, interval):
             host_results = get_bandwidth_results()
@@ -306,6 +310,7 @@ class MainMenu(CommandMenu):
 
                 y_off += 2
                 x_off = x_rst
+                temps_reached = False
 
                 for host, result in host_results:
                     result_data = [
@@ -316,6 +321,10 @@ class MainMenu(CommandMenu):
                         '{}↑ {}↓'.format(result.upload_total_size, result.download_total_size),
                         '{}↑ {}↓'.format(result.upload_total_count, result.download_total_count)
                     ]
+
+                    if not temps_reached and host in hosts_to_be_freed:
+                        temps_reached = True
+                        y_off += 1
 
                     for j, string in enumerate(result_data):
                         stdscr.addstr(y_off, x_off, string)
@@ -334,6 +343,8 @@ class MainMenu(CommandMenu):
                 except KeyboardInterrupt:
                     return
                     
+        hosts = self._get_hosts_by_ids(args.id)
+        hosts_to_be_freed = set()
 
         interval = 0.5  # in s
         if args.interval:
@@ -343,6 +354,13 @@ class MainMenu(CommandMenu):
 
             interval = int(args.interval) / 1000    # from ms to s
 
+        for host in hosts:
+            if not host.spoofed:
+                hosts_to_be_freed.add(host)
+
+            self.arp_spoofer.add(host)
+            self.bandwidth_monitor.add(host)
+                
         if len(get_bandwidth_results()) == 0:
             IO.error('no hosts to be monitored.')
             return
@@ -351,6 +369,9 @@ class MainMenu(CommandMenu):
             curses.wrapper(display, interval)
         except curses.error:
             IO.error('monitor error occurred. maybe terminal too small?')
+
+        for host in hosts_to_be_freed:
+            self._free_host(host)
 
     def _analyze_handler(self, args):
         hosts = self._get_hosts_by_ids(args.id)
@@ -608,8 +629,8 @@ class MainMenu(CommandMenu):
 {b}{s}e.g.: add 192.168.178.24
 {s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
 
-{y}monitor (--interval [time in ms]){r}{}monitors bandwidth usage of limited host(s).
-{b}{s}e.g.: monitor --interval 600{r}
+{y}monitor [ID1,ID2,...]{r}{}monitors bandwidth usage of host(s).
+{y}        (--interval [time in ms]){r}{}{b}e.g.: monitor all --interval 600{r}
 
 {y}analyze [ID1,ID2,...]{r}{}analyzes traffic of host(s) without limiting
 {y}        (--duration [time in s]){r}{}to determine who uses how much bandwidth.
@@ -637,7 +658,8 @@ class MainMenu(CommandMenu):
                     spaces[len('      (--upload) (--download)'):],
                     spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('add [IP] (--mac [MAC])'):],
-                    spaces[len('monitor (--interval [time in ms])'):],
+                    spaces[len('monitor [ID1,ID2,...]'):],
+                    spaces[len('        (--interval [time in ms])'):],
                     spaces[len('analyze [ID1,ID2,...]'):],
                     spaces[len('        (--duration [time in s])'):],
                     spaces[len('watch'):],
