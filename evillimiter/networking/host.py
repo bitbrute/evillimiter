@@ -1,6 +1,3 @@
-from evillimiter.console.io import IO
-
-
 class Host(object):
     def __init__(self, ip, mac, name):
         self.ip = ip
