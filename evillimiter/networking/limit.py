@@ -1,7 +1,6 @@
 import threading
 
 import evillimiter.console.shell as shell
-from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
 from evillimiter.console.io import IO
 
