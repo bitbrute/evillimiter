@@ -1,4 +1,3 @@
-#!/usr/bin/env
 
 sudo apt install python3-pip	#pip3
 sudo apt-get install python3-setuptools #setuptools of python3
