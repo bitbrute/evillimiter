@@ -23,7 +23,7 @@ Possibly missing python packages will be installed during the installation proce
 ## Installation
 
 ```bash
-git clone https://github.com/bitbrute/evillimiter.git
+git clone https://github.com/StaticPirate/evillimiter.git
 cd evillimiter
 sudo python3 setup.py install
 ```
