@@ -5,7 +5,7 @@ import argparse
 import platform
 import collections
 import pkg_resources
-
+import readline
 import evillimiter.networking.utils as netutils
 from evillimiter.menus.main_menu import MainMenu
 from evillimiter.console.banner import get_main_banner
