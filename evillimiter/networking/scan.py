@@ -2,6 +2,8 @@ import sys
 import socket
 from tqdm import tqdm
 from netaddr import IPAddress
+import logging
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 from scapy.all import sr1, ARP # pylint: disable=no-name-in-module
 from concurrent.futures import ThreadPoolExecutor
 
