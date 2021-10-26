@@ -21,6 +21,11 @@ def output_suppressed(command, root=True):
     return subprocess.check_output('sudo ' + command if root else command, shell=True, stderr=DEVNULL).decode('utf-8')
 
 
+def locate_iptables_bin(name):
+    if "nf_tables" in output_suppressed("{} --version".format(name)):
+        return locate_bin("iptables-legacy")
+    return locate_bin(name)
+
 def locate_bin(name):
     try:
         return output_suppressed('which {}'.format(name)).replace('\n', '')
