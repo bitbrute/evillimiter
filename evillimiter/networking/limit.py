@@ -3,6 +3,7 @@ import threading
 import evillimiter.console.shell as shell
 from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
+from evillimiter.console.io import IO
 
 
 class Limiter(object):
@@ -89,6 +90,33 @@ class Limiter(object):
                 self.block(new_host, info['direction'])
             else:
                 self.limit(new_host, info['direction'], info['rate'])
+
+    def pretty_status(self, host):
+        """
+        Gets the host limitation status in a formatted and colored string
+        """
+        with self._host_dict_lock:
+            if host in self._host_dict:
+                rate = self._host_dict[host]['rate']
+                direction = self._host_dict[host]['direction']
+                uload = None
+                dload = None
+                final = ''
+
+                if direction in (Direction.BOTH, Direction.OUTGOING):
+                    uload = '0bit' if rate is None else rate
+                if direction in (Direction.BOTH, Direction.INCOMING):
+                    dload = '0bit' if rate is None else rate
+
+                if uload is not None:
+                    final += '{}↑'.format(uload)
+                if dload is not None:
+                    final += ' {}↓'.format(dload)
+
+                return '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, final.strip(), IO.Style.RESET_ALL)
+
+            else:
+                return '{}Free{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL)
 
     def _new_host_limit_ids(self, host, direction):
         """
