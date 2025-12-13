@@ -1,3 +1,13 @@
+import warnings
+
+# ignore Scapy warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning, module="scapy")
+warnings.filterwarnings("ignore", message=".*Ethernet destination MAC address.*")
+warnings.filterwarnings("ignore", message=".*iface.*has no effect on L3.*")
+
+import logging
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+
 import re
 import os
 import os.path
@@ -170,7 +180,7 @@ def run():
         return
     
     if initialize(args.interface):
-        IO.spacer()        
+        IO.spacer()
         menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask)
         menu.start()
         cleanup(args.interface)
