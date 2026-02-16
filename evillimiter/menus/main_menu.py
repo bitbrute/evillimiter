@@ -31,20 +31,28 @@ class MainMenu(CommandMenu):
 
         scan_parser = self.parser.add_subparser('scan', self._scan_handler)
         scan_parser.add_parameterized_flag('--range', 'iprange')
+        scan_parser.add_flag('--quick', 'quick')
+
+        rescan_parser = self.parser.add_subparser('rescan', self._rescan_handler)
 
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
         limit_parser.add_parameter('rate')
         limit_parser.add_flag('--upload', 'upload')
         limit_parser.add_flag('--download', 'download')
+        limit_parser.add_flag('--full', 'full')
+        limit_parser.add_parameterized_flag('--except', 'except_')
 
         block_parser = self.parser.add_subparser('block', self._block_handler)
         block_parser.add_parameter('id')
         block_parser.add_flag('--upload', 'upload')
         block_parser.add_flag('--download', 'download')
+        block_parser.add_flag('--full', 'full')
+        block_parser.add_parameterized_flag('--except', 'except_')
 
         free_parser = self.parser.add_subparser('free', self._free_handler)
         free_parser.add_parameter('id')
+        free_parser.add_parameterized_flag('--except', 'except_')
 
         add_parser = self.parser.add_subparser('add', self._add_handler)
         add_parser.add_parameter('ip')
@@ -115,7 +123,8 @@ class MainMenu(CommandMenu):
     def _scan_handler(self, args):
         """
         Handles 'scan' command-line argument
-        (Re)scans for hosts on the network
+        (Re)scans for hosts on the network using deep multi-pass scan
+        Use --quick for a fast single-pass scan
         """
         if args.iprange:
             iprange = self._parse_iprange(args.iprange)
@@ -128,15 +137,53 @@ class MainMenu(CommandMenu):
         with self.hosts_lock:
             for host in self.hosts:
                 self._free_host(host)
-            
-        IO.spacer()
-        hosts = self.host_scanner.scan(iprange)
+
+        if args.quick:
+            hosts = self.host_scanner.quick_scan(iprange)
+            IO.ok('{} hosts found (quick scan).'.format(len(hosts)))
+        else:
+            hosts = self.host_scanner.scan(iprange)
 
         self.hosts_lock.acquire()
         self.hosts = hosts
         self.hosts_lock.release()
 
-        IO.ok('{}{}{} hosts discovered.'.format(IO.Fore.LIGHTYELLOW_EX, len(hosts), IO.Style.RESET_ALL))
+        IO.spacer()
+
+    def _rescan_handler(self, args):
+        """
+        Handles 'rescan' command — rescans and merges new hosts
+        without losing status of existing hosts (spoofed/limited/blocked)
+        """
+        IO.ok('rescanning network (keeping existing host states)...')
+        new_hosts = self.host_scanner.scan()
+
+        with self.hosts_lock:
+            existing_macs = {h.mac.lower(): h for h in self.hosts}
+            added_count = 0
+
+            for new_host in new_hosts:
+                mac = new_host.mac.lower()
+                if mac in existing_macs:
+                    existing = existing_macs[mac]
+                    # update IP if changed (device got new DHCP lease)
+                    if existing.ip != new_host.ip:
+                        old_ip = existing.ip
+                        existing.ip = new_host.ip
+                        IO.ok('host {} IP changed: {} -> {}'.format(
+                            mac, old_ip, new_host.ip))
+                    # update hostname/vendor if we got better info
+                    if new_host.name and not existing.name:
+                        existing.name = new_host.name
+                    if new_host.vendor and not existing.vendor:
+                        existing.vendor = new_host.vendor
+                else:
+                    # new host discovered
+                    self.hosts.append(new_host)
+                    added_count += 1
+
+            IO.ok('{} new hosts added, {} total hosts.'.format(added_count, len(self.hosts)))
+
         IO.spacer()
 
     def _hosts_handler(self, args):
@@ -148,6 +195,7 @@ class MainMenu(CommandMenu):
             '{}ID{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
             '{}IP address{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
             '{}MAC address{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
+            '{}Vendor{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
             '{}Hostname{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
             '{}Status{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
         ]]
@@ -158,6 +206,7 @@ class MainMenu(CommandMenu):
                     '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, self._get_host_id(host, lock=False), IO.Style.RESET_ALL),
                     host.ip,
                     host.mac,
+                    getattr(host, 'vendor', ''),
                     host.name,
                     host.pretty_status()
                 ])
@@ -177,7 +226,7 @@ class MainMenu(CommandMenu):
         Handles 'limit' command-line argument
         Limits bandwith of host to specified rate
         """
-        hosts = self._get_hosts_by_ids(args.id)
+        hosts = self._get_hosts_by_ids(args.id, getattr(args, 'except_', None))
         if hosts is None or len(hosts) == 0:
             return
 
@@ -194,14 +243,19 @@ class MainMenu(CommandMenu):
             self.limiter.limit(host, direction, rate)
             self.bandwidth_monitor.add(host)
 
-            IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
+            # --full: enable RA kill to force IPv4 fallback
+            if args.full:
+                host.ipv6_killed = True
+
+            mode_str = ' {}(full mode, IPv6 killed){r}'.format(IO.Fore.CYAN, r=IO.Style.RESET_ALL) if args.full else ''
+            IO.ok('{}{}{r} {} {}limited{r} to {}.{}'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, mode_str, r=IO.Style.RESET_ALL))
 
     def _block_handler(self, args):
         """
         Handles 'block' command-line argument
         Blocks internet communication for host
         """
-        hosts = self._get_hosts_by_ids(args.id)
+        hosts = self._get_hosts_by_ids(args.id, getattr(args, 'except_', None))
         direction = self._parse_direction_args(args)
 
         if hosts is not None and len(hosts) > 0:
@@ -211,17 +265,47 @@ class MainMenu(CommandMenu):
 
                 self.limiter.block(host, direction)
                 self.bandwidth_monitor.add(host)
-                IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
+
+                # --full: enable RA kill to force IPv4 fallback
+                if args.full:
+                    host.ipv6_killed = True
+
+                mode_str = ' {}(full mode, IPv6 killed){r}'.format(IO.Fore.CYAN, r=IO.Style.RESET_ALL) if args.full else ''
+                IO.ok('{}{}{r} {} {}blocked{r}.{}'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, mode_str, r=IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
         """
         Handles 'free' command-line argument
         Frees the host from all limitations
         """
-        hosts = self._get_hosts_by_ids(args.id)
+        hosts = self._get_hosts_by_ids(args.id, getattr(args, 'except_', None))
         if hosts is not None and len(hosts) > 0:
             for host in hosts:
+                was_limited = host.limited
+                was_blocked = host.blocked
+                was_spoofed = host.spoofed
+                was_ipv6_killed = host.ipv6_killed
+
                 self._free_host(host)
+
+                # build detailed confirmation message
+                actions = []
+                if was_spoofed:
+                    actions.append('ARP restored')
+                if was_ipv6_killed:
+                    actions.append('IPv6 restored')
+                if was_limited:
+                    actions.append('limit removed')
+                if was_blocked:
+                    actions.append('block removed')
+
+                detail = ' ({})'.format(', '.join(actions)) if actions else ''
+                IO.ok('{}{}{r} {}freed{r}.{}'.format(
+                    IO.Fore.LIGHTYELLOW_EX, host.ip,
+                    IO.Fore.LIGHTGREEN_EX,
+                    detail,
+                    r=IO.Style.RESET_ALL
+                ))
 
     def _add_handler(self, args):
         """
@@ -277,6 +361,7 @@ class MainMenu(CommandMenu):
 
             header_off = [
                 ('ID', 5), ('IP address', 18), ('Hostname', hname_max_len + 2),
+                ('Status', 18), ('IPv6', 10),
                 ('Current (per s)', 20), ('Total', 16), ('Packets', 0)
             ]
 
@@ -297,10 +382,27 @@ class MainMenu(CommandMenu):
                 x_off = x_rst
 
                 for host, result in host_results:
+                    # determine status string
+                    if host.blocked:
+                        status_str = 'Blocked'
+                    elif host.limited:
+                        limit_info = self.limiter._host_dict.get(host)
+                        if limit_info and 'rate' in limit_info:
+                            status_str = 'Limited {}'.format(limit_info['rate'])
+                        else:
+                            status_str = 'Limited'
+                    else:
+                        status_str = 'Spoofed'
+
+                    # IPv6 status: RA kill is active when host is spoofed
+                    ipv6_str = 'Killed' if host.ipv6_killed else '-'
+
                     result_data = [
                         str(self._get_host_id(host)),
                         host.ip,
                         host.name,
+                        status_str,
+                        ipv6_str,
                         '{}↑ {}↓'.format(result.upload_rate, result.download_rate),
                         '{}↑ {}↓'.format(result.upload_total_size, result.download_total_size),
                         '{}↑ {}↓'.format(result.upload_total_count, result.download_total_count)
@@ -558,11 +660,18 @@ class MainMenu(CommandMenu):
 
         IO.print(
             """
-{y}scan (--range [IP range]){r}{}scans for online hosts on your network.
-{s}required to find the hosts you want to limit.
+{y}scan (--range [IP range]) (--quick){r}{}scans for online hosts using ultra-deep multi-method scan.
+{s}8 methods: ARP broadcast, passive ARP sniffing,
+{s}ICMP ping sweep, mDNS, NetBIOS, TCP SYN probe,
+{s}unicast ARP, DHCP leases.
+{s}use --quick for fast single-pass ARP scan.
 {b}{s}e.g.: scan
+{s}      scan --quick
 {s}      scan --range 192.168.178.1-192.168.178.50
 {s}      scan --range 192.168.178.1/24{r}
+
+{y}rescan{r}{}rescans & merges new hosts without losing
+{s}existing host states (spoofed/limited/blocked).
 
 {y}hosts (--force){r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
@@ -570,15 +679,20 @@ class MainMenu(CommandMenu):
 {y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
 {y}      (--upload) (--download){r}{}{b}e.g.: limit 4 100kbit
 {s}      limit 2,3,4 1gbit --download
-{s}      limit all 200kbit --upload{r}
+{s}      limit all 200kbit --upload
+{s}      limit 2 200kbit --full  (kills IPv6)
+{s}      limit all 200kbit --except 0,10{r}
 
 {y}block [ID1,ID2,...]{r}{}blocks internet access of host(s).
 {y}      (--upload) (--download){r}{}{b}e.g.: block 3,2
-{s}      block all --upload{r}
+{s}      block all --upload
+{s}      block 2 --full  (kills IPv6)
+{s}      block all --except 0,10{r}
 
 {y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
 {b}{s}e.g.: free 3
-{s}      free all{r}
+{s}      free all
+{s}      free all --except 5{r}
 
 {y}add [IP] (--mac [MAC]){r}{}adds custom host to host list.
 {s}mac resolved automatically.
@@ -604,7 +718,8 @@ class MainMenu(CommandMenu):
 
 {y}quit{r}{}quits the application.
             """.format(
-                    spaces[len('scan (--range [IP range])'):],
+                    spaces[len('scan (--range [IP range]) (--quick)'):],
+                    spaces[len('rescan'):],
                     spaces[len('hosts (--force)'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('      (--upload) (--download)'):],
@@ -649,40 +764,60 @@ class MainMenu(CommandMenu):
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
 
-    def _get_hosts_by_ids(self, ids_string):
+    def _get_hosts_by_ids(self, ids_string, except_string=None):
         if ids_string == 'all':
             with self.hosts_lock:
-                return self.hosts.copy()
+                hosts = set(self.hosts.copy())
+        else:
+            ids = ids_string.split(',')
+            hosts = set()
 
-        ids = ids_string.split(',')
-        hosts = set()
+            with self.hosts_lock:
+                for id_ in ids:
+                    is_mac = netutils.validate_mac_address(id_)
+                    is_ip = netutils.validate_ip_address(id_)
+                    is_id_ = id_.isdigit()
 
-        with self.hosts_lock:
-            for id_ in ids:
-                is_mac = netutils.validate_mac_address(id_)
-                is_ip = netutils.validate_ip_address(id_)
-                is_id_ = id_.isdigit()
-
-                if not is_mac and not is_ip and not is_id_:
-                    IO.error('invalid identifier(s): \'{}\'.'.format(ids_string))
-                    return
-
-                if is_mac or is_ip:
-                    found = False
-                    for host in self.hosts:
-                        if host.mac == id_.lower() or host.ip == id_:
-                            found = True
-                            hosts.add(host)
-                            break
-                    if not found:
-                        IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                    if not is_mac and not is_ip and not is_id_:
+                        IO.error('invalid identifier(s): \'{}\'.'.format(ids_string))
                         return
-                else:
-                    id_ = int(id_)
-                    if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
-                        IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
-                        return
-                    hosts.add(self.hosts[id_])
+
+                    if is_mac or is_ip:
+                        found = False
+                        for host in self.hosts:
+                            if host.mac == id_.lower() or host.ip == id_:
+                                found = True
+                                hosts.add(host)
+                                break
+                        if not found:
+                            IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                            return
+                    else:
+                        id_ = int(id_)
+                        if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
+                            IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                            return
+                        hosts.add(self.hosts[id_])
+
+        # --except: remove excluded hosts from the result
+        if except_string:
+            except_ids = except_string.split(',')
+            except_hosts = set()
+            with self.hosts_lock:
+                for eid in except_ids:
+                    if eid.isdigit():
+                        idx = int(eid)
+                        if idx in range(len(self.hosts)):
+                            except_hosts.add(self.hosts[idx])
+                    else:
+                        for host in self.hosts:
+                            if host.mac == eid.lower() or host.ip == eid:
+                                except_hosts.add(host)
+                                break
+            hosts -= except_hosts
+            if except_hosts:
+                excluded = ', '.join(h.ip for h in except_hosts)
+                IO.ok('excluding: {}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, excluded, IO.Style.RESET_ALL))
 
         return hosts
 

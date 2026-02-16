@@ -3,6 +3,12 @@
 
 import os
 import sys
+import warnings
+
+# suppress scapy ARP warnings globally before any scapy imports
+warnings.filterwarnings("ignore", message=".*Ethernet destination MAC.*")
+warnings.filterwarnings("ignore", message=".*MAC address to reach destination.*")
+warnings.filterwarnings("ignore", message=".*is-at ARP.*")
 
 
 if __name__ == '__main__':

@@ -4,18 +4,24 @@ from evillimiter.console.io import IO
 class Host(object):
     def __init__(self, ip, mac, name):
         self.ip = ip
-        self.mac = mac
+        self.mac = mac.lower() if mac else mac
         self.name = name
+        self.vendor = ''
         self.spoofed = False
         self.limited = False
         self.blocked = False
         self.watched = False
+        self.ipv6_killed = False
 
     def __eq__(self, other):
-        return self.ip == other.ip
+        if isinstance(other, Host):
+            # Primary: compare by MAC (stable across IP changes)
+            # Fallback: also match by IP for manually added hosts
+            return self.mac.lower() == other.mac.lower() or self.ip == other.ip
+        return False
 
     def __hash__(self):
-        return hash((self.mac, self.ip))
+        return hash(self.mac.lower())
 
     def pretty_status(self):
         if self.limited:

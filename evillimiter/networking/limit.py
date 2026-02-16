@@ -19,24 +19,56 @@ class Limiter(object):
     def limit(self, host, direction, rate):
         """
         Limits the uload/dload traffic of a host
-        to a specified rate
+        to a specified rate with high accuracy.
+        Uses HTB + SFQ for precise rate control,
+        MAC-based iptables rules for reliability (survives IP changes),
+        and conntrack marks for established connections.
         """
         host_ids = self._new_host_limit_ids(host, direction)
 
+        # Calculate proper burst size:
+        # HTB burst should be at least rate/HZ (typically HZ=250 on Linux)
+        # We use rate/8 (bits to bytes) / 250 * 1.5 for safety
+        # Minimum burst of 15k to handle small rates properly
+        burst_value = max(15000, int(rate.rate / 8 / 250 * 1.5))
+        burst_str = '{}b'.format(burst_value)
+
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
             # add a class to the root qdisc with specified rate
-            shell.execute_suppressed('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.upload_id, r=rate, b=rate * 1.1))
+            shell.execute_suppressed('{} class add dev {} parent 1:0 classid 1:{} htb rate {} burst {} cburst {}'.format(
+                BIN_TC, self.interface, host_ids.upload_id, rate, burst_str, burst_str))
+            # add SFQ leaf qdisc for fair queuing within the class (more accurate shaping)
+            shell.execute_suppressed('{} qdisc add dev {} parent 1:{} handle {}0: sfq perturb 10'.format(
+                BIN_TC, self.interface, host_ids.upload_id, host_ids.upload_id))
             # add a fw filter that filters packets marked with the corresponding ID
-            shell.execute_suppressed('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.upload_id))
-            # marks outgoing packets 
-            shell.execute_suppressed('{} -t mangle -A POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, host_ids.upload_id))
+            shell.execute_suppressed('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(
+                BIN_TC, self.interface, id=host_ids.upload_id))
+            # marks outgoing packets by IP
+            shell.execute_suppressed('{} -t mangle -A POSTROUTING -s {} -j MARK --set-mark {}'.format(
+                BIN_IPTABLES, host.ip, host_ids.upload_id))
+            # also mark by MAC (survives IP changes from DHCP)
+            shell.execute_suppressed('{} -t mangle -A POSTROUTING -m mac --mac-source {} -j MARK --set-mark {}'.format(
+                BIN_IPTABLES, host.mac, host_ids.upload_id))
+            # save mark to connection (connmark) so established connections are also limited
+            shell.execute_suppressed('{} -t mangle -A POSTROUTING -s {} -j CONNMARK --save-mark'.format(
+                BIN_IPTABLES, host.ip))
+
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             # add a class to the root qdisc with specified rate
-            shell.execute_suppressed('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.download_id, r=rate, b=rate * 1.1))
+            shell.execute_suppressed('{} class add dev {} parent 1:0 classid 1:{} htb rate {} burst {} cburst {}'.format(
+                BIN_TC, self.interface, host_ids.download_id, rate, burst_str, burst_str))
+            # add SFQ leaf qdisc for fair queuing
+            shell.execute_suppressed('{} qdisc add dev {} parent 1:{} handle {}0: sfq perturb 10'.format(
+                BIN_TC, self.interface, host_ids.download_id, host_ids.download_id))
             # add a fw filter that filters packets marked with the corresponding ID
-            shell.execute_suppressed('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.download_id))
+            shell.execute_suppressed('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(
+                BIN_TC, self.interface, id=host_ids.download_id))
             # marks incoming packets
-            shell.execute_suppressed('{} -t mangle -A PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, host_ids.download_id))
+            shell.execute_suppressed('{} -t mangle -A PREROUTING -d {} -j MARK --set-mark {}'.format(
+                BIN_IPTABLES, host.ip, host_ids.download_id))
+            # restore connmark for existing connections heading to this host
+            shell.execute_suppressed('{} -t mangle -A PREROUTING -d {} -j CONNMARK --restore-mark'.format(
+                BIN_IPTABLES, host.ip))
 
         host.limited = True
 
@@ -47,11 +79,15 @@ class Limiter(object):
         host_ids = self._new_host_limit_ids(host, direction)
 
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            # drops forwarded packets with matching source
-            shell.execute_suppressed('{} -t filter -A FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            # drops forwarded packets with matching source IP
+            shell.execute_suppressed('{} -A FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            # also drop by MAC (survives DHCP IP changes)
+            shell.execute_suppressed('{} -A FORWARD -m mac --mac-source {} -j DROP'.format(BIN_IPTABLES, host.mac))
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             # drops forwarded packets with matching destination
-            shell.execute_suppressed('{} -t filter -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            # drop related/established connections too (prevents lingering)
+            shell.execute_suppressed('{} -A FORWARD -d {} -m conntrack --ctstate ESTABLISHED,RELATED -j DROP'.format(BIN_IPTABLES, host.ip))
 
         host.blocked = True
 
@@ -132,22 +168,30 @@ class Limiter(object):
 
     def _delete_tc_class(self, id_):
         """
-        Deletes the tc class and applied filters
+        Deletes the tc class, SFQ leaf qdisc, and applied filters
         for a given ID (host)
         """
         shell.execute_suppressed('{} filter del dev {} parent 1:0 prio {}'.format(BIN_TC, self.interface, id_))
+        # remove SFQ leaf qdisc first
+        shell.execute_suppressed('{} qdisc del dev {} parent 1:{} handle {}0:'.format(BIN_TC, self.interface, id_, id_))
         shell.execute_suppressed('{} class del dev {} parent 1:0 classid 1:{}'.format(BIN_TC, self.interface, id_))
 
     def _delete_iptables_entries(self, host, direction, id_):
         """
         Deletes iptables rules for a given ID (host)
+        Removes all rules: IP-based, MAC-based, connmark, and conntrack
         """
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
             shell.execute_suppressed('{} -t mangle -D POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
-            shell.execute_suppressed('{} -t filter -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -t mangle -D POSTROUTING -m mac --mac-source {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.mac, id_))
+            shell.execute_suppressed('{} -t mangle -D POSTROUTING -s {} -j CONNMARK --save-mark'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -D FORWARD -m mac --mac-source {} -j DROP'.format(BIN_IPTABLES, host.mac))
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             shell.execute_suppressed('{} -t mangle -D PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
-            shell.execute_suppressed('{} -t filter -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -t mangle -D PREROUTING -d {} -j CONNMARK --restore-mark'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -D FORWARD -d {} -m conntrack --ctstate ESTABLISHED,RELATED -j DROP'.format(BIN_IPTABLES, host.ip))
 
 
 class Direction:

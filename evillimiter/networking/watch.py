@@ -9,7 +9,7 @@ class HostWatcher(object):
         self._hosts = set()
         self._hosts_lock = threading.Lock()
 
-        self._interval = 45     # scan interval in s
+        self._interval = 25     # scan interval in s (faster reconnect detection)
         self._iprange = None    # custom ip range to be watched
         self._settings_lock = threading.Lock()
 

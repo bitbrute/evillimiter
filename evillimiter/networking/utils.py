@@ -1,6 +1,6 @@
 import re
 import netifaces
-from scapy.all import ARP, sr1 # pylint: disable=no-name-in-module
+from scapy.all import ARP, sr1, Ether, srp  # pylint: disable=no-name-in-module
 
 import evillimiter.console.shell as shell
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES, BIN_SYSCTL, IP_FORWARD_LOC
@@ -35,15 +35,37 @@ def get_default_netmask(interface):
 
 def get_mac_by_ip(interface, address):
     """
-    Resolves hardware address from IP by sending ARP request
-    and receiving ARP response
+    Resolves hardware address from IP by sending ARP request.
+    Uses multiple retries with increasing timeouts for reliability
+    on slow routers (IndiHome, etc).
     """
-    # ARP packet with operation 1 (who-is)
-    packet = ARP(op=1, pdst=address)
-    response = sr1(packet, timeout=3, verbose=0, iface=interface)
+    for timeout in [2, 4, 6]:
+        # Method 1: scapy sr1 (standard)
+        packet = ARP(op=1, pdst=address)
+        response = sr1(packet, timeout=timeout, verbose=0, iface=interface)
+        if response is not None:
+            return response.hwsrc
 
-    if response is not None:
-        return response.hwsrc
+        # Method 2: L2 srp with explicit broadcast (more reliable)
+        try:
+            pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=address)
+            answered, _ = srp(pkt, timeout=timeout, iface=interface, verbose=0)
+            if answered:
+                return answered[0][1].hwsrc
+        except Exception:
+            pass
+
+    # Method 3: check OS ARP table as last resort
+    try:
+        with open('/proc/net/arp', 'r') as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 4 and parts[0] == address and parts[3] != '00:00:00:00:00:00':
+                    return parts[3]
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    return None
 
 
 def exists_interface(interface):
@@ -56,7 +78,7 @@ def exists_interface(interface):
 def flush_network_settings(interface):
     """
     Flushes all iptable rules and traffic control entries
-    related to the given interface
+    related to the given interface. More thorough cleanup.
     """
     # reset default policy
     shell.execute_suppressed('{} -P INPUT ACCEPT'.format(BIN_IPTABLES))
@@ -66,8 +88,11 @@ def flush_network_settings(interface):
     # flush all chains in all tables (including user-defined)
     shell.execute_suppressed('{} -t mangle -F'.format(BIN_IPTABLES))
     shell.execute_suppressed('{} -t nat -F'.format(BIN_IPTABLES))
+    shell.execute_suppressed('{} -t raw -F'.format(BIN_IPTABLES))
     shell.execute_suppressed('{} -F'.format(BIN_IPTABLES))
     shell.execute_suppressed('{} -X'.format(BIN_IPTABLES))
+    shell.execute_suppressed('{} -t mangle -X'.format(BIN_IPTABLES))
+    shell.execute_suppressed('{} -t nat -X'.format(BIN_IPTABLES))
 
     # delete root qdisc for given interface
     shell.execute_suppressed('{} qdisc del dev {} root'.format(BIN_TC, interface))
