@@ -15,7 +15,7 @@ from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Limiter, Direction
 from evillimiter.networking.spoof import ARPSpoofer
-from evillimiter.networking.scan import HostScanner
+from evillimiter.networking.scan import HostScanner, ScanIntensity
 from evillimiter.networking.monitor import BandwidthMonitor
 from evillimiter.networking.watch import HostWatcher
 
@@ -31,6 +31,7 @@ class MainMenu(CommandMenu):
 
         scan_parser = self.parser.add_subparser('scan', self._scan_handler)
         scan_parser.add_parameterized_flag('--range', 'iprange')
+        scan_parser.add_parameterized_flag('--intensity', 'intensity')
 
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
@@ -51,6 +52,7 @@ class MainMenu(CommandMenu):
         add_parser.add_parameterized_flag('--mac', 'mac')
 
         monitor_parser = self.parser.add_subparser('monitor', self._monitor_handler)
+        monitor_parser.add_parameter('id')
         monitor_parser.add_parameterized_flag('--interval', 'interval')
 
         analyze_parser = self.parser.add_subparser('analyze', self._analyze_handler)
@@ -85,7 +87,7 @@ class MainMenu(CommandMenu):
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.limiter = Limiter(self.interface)
         self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
-        self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
+        self.host_watcher = HostWatcher(self.interface, self.iprange, self._reconnect_callback)
 
         # holds discovered hosts
         self.hosts = []
@@ -125,6 +127,16 @@ class MainMenu(CommandMenu):
         else:
             iprange = None
 
+        if args.intensity:
+            intensity = self._parse_scan_intensity(args.intensity)
+            if intensity is None:
+                IO.error('invalid intensity level.')
+                return
+        else:
+            intensity = ScanIntensity.NORMAL
+
+        self.host_scanner.set_intensity(intensity)
+
         with self.hosts_lock:
             for host in self.hosts:
                 self._free_host(host)
@@ -159,7 +171,7 @@ class MainMenu(CommandMenu):
                     host.ip,
                     host.mac,
                     host.name,
-                    host.pretty_status()
+                    self.limiter.pretty_status(host)
                 ])
 
         table = SingleTable(table_data, 'Hosts')
@@ -269,7 +281,10 @@ class MainMenu(CommandMenu):
         """
         def get_bandwidth_results():
             with self.hosts_lock:
-                return [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None]
+                return sorted(
+                    [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None],
+                    key=lambda h: not (h[0].limited or h[0].blocked)
+                )
 
         def display(stdscr, interval):
             host_results = get_bandwidth_results()
@@ -295,6 +310,7 @@ class MainMenu(CommandMenu):
 
                 y_off += 2
                 x_off = x_rst
+                temps_reached = False
 
                 for host, result in host_results:
                     result_data = [
@@ -305,6 +321,10 @@ class MainMenu(CommandMenu):
                         '{}↑ {}↓'.format(result.upload_total_size, result.download_total_size),
                         '{}↑ {}↓'.format(result.upload_total_count, result.download_total_count)
                     ]
+
+                    if not temps_reached and host in hosts_to_be_freed:
+                        temps_reached = True
+                        y_off += 1
 
                     for j, string in enumerate(result_data):
                         stdscr.addstr(y_off, x_off, string)
@@ -323,6 +343,8 @@ class MainMenu(CommandMenu):
                 except KeyboardInterrupt:
                     return
                     
+        hosts = self._get_hosts_by_ids(args.id)
+        hosts_to_be_freed = set()
 
         interval = 0.5  # in s
         if args.interval:
@@ -332,6 +354,13 @@ class MainMenu(CommandMenu):
 
             interval = int(args.interval) / 1000    # from ms to s
 
+        for host in hosts:
+            if not host.spoofed:
+                hosts_to_be_freed.add(host)
+
+            self.arp_spoofer.add(host)
+            self.bandwidth_monitor.add(host)
+                
         if len(get_bandwidth_results()) == 0:
             IO.error('no hosts to be monitored.')
             return
@@ -340,6 +369,9 @@ class MainMenu(CommandMenu):
             curses.wrapper(display, interval)
         except curses.error:
             IO.error('monitor error occurred. maybe terminal too small?')
+
+        for host in hosts_to_be_freed:
+            self._free_host(host)
 
     def _analyze_handler(self, args):
         hosts = self._get_hosts_by_ids(args.id)
@@ -439,6 +471,7 @@ class MainMenu(CommandMenu):
 
             iprange = self.host_watcher.iprange
             interval = self.host_watcher.interval
+            intensity = self.host_watcher.intensity
 
             set_table_data.append([
                 '{}range{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
@@ -448,6 +481,11 @@ class MainMenu(CommandMenu):
             set_table_data.append([
                 '{}interval{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
                 '{}s'.format(interval)
+            ])
+
+            set_table_data.append([
+                '{}intensity{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
+                intensity
             ])
 
             for host in self.host_watcher.hosts:
@@ -517,6 +555,12 @@ class MainMenu(CommandMenu):
                 self.host_watcher.interval = int(args.value)
             else:
                 IO.error('invalid interval.')
+        elif args.attribute.lower() in ('intensity', 'scan_intensity'):
+            intensity = self._parse_scan_intensity(args.value)
+            if intensity is not None:
+                self.host_watcher.intensity = intensity
+            else:
+                IO.error('invalid scan intensity level.')
         else:
             IO.error('{}{}{} is an invalid settings attribute.'.format(IO.Fore.LIGHTYELLOW_EX, args.attribute, IO.Style.RESET_ALL))
 
@@ -559,10 +603,10 @@ class MainMenu(CommandMenu):
         IO.print(
             """
 {y}scan (--range [IP range]){r}{}scans for online hosts on your network.
-{s}required to find the hosts you want to limit.
+{y}     (--intensity [(1,2,3)]){r}{}required to find the hosts you want to limit.
 {b}{s}e.g.: scan
 {s}      scan --range 192.168.178.1-192.168.178.50
-{s}      scan --range 192.168.178.1/24{r}
+{s}      scan --range 192.168.178.1/24 --intensity 3{r}
 
 {y}hosts (--force){r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
@@ -585,8 +629,8 @@ class MainMenu(CommandMenu):
 {b}{s}e.g.: add 192.168.178.24
 {s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
 
-{y}monitor (--interval [time in ms]){r}{}monitors bandwidth usage of limited host(s).
-{b}{s}e.g.: monitor --interval 600{r}
+{y}monitor [ID1,ID2,...]{r}{}monitors bandwidth usage of host(s).
+{y}        (--interval [time in ms]){r}{}{b}e.g.: monitor all --interval 600{r}
 
 {y}analyze [ID1,ID2,...]{r}{}analyzes traffic of host(s) without limiting
 {y}        (--duration [time in s]){r}{}to determine who uses how much bandwidth.
@@ -598,13 +642,15 @@ class MainMenu(CommandMenu):
 {y}watch remove [ID1,ID2,...]{r}{}removes host from the reconnection watchlist.
 {b}{s}e.g.: watch remove all{r}
 {y}watch set [attr] [value]{r}{}changes reconnect watch settings.
-{b}{s}e.g.: watch set interval 120{r}
+{b}{s}e.g.: watch set interval 120
+{s}      watch set intensity 1{r}
 
 {y}clear{r}{}clears the terminal window.
 
 {y}quit{r}{}quits the application.
             """.format(
                     spaces[len('scan (--range [IP range])'):],
+                    spaces[len('     (--intensity [(1,2,3)])'):],
                     spaces[len('hosts (--force)'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('      (--upload) (--download)'):],
@@ -612,7 +658,8 @@ class MainMenu(CommandMenu):
                     spaces[len('      (--upload) (--download)'):],
                     spaces[len('free [ID1,ID2,...]'):],
                     spaces[len('add [IP] (--mac [MAC])'):],
-                    spaces[len('monitor (--interval [time in ms])'):],
+                    spaces[len('monitor [ID1,ID2,...]'):],
+                    spaces[len('        (--interval [time in ms])'):],
                     spaces[len('analyze [ID1,ID2,...]'):],
                     spaces[len('        (--duration [time in s])'):],
                     spaces[len('watch'):],
@@ -704,6 +751,10 @@ class MainMenu(CommandMenu):
                 return list(netaddr.IPNetwork(range))
         except netaddr.core.AddrFormatError:
             return
+
+    def _parse_scan_intensity(self, value):
+        if value.isdigit() and int(value) in (ScanIntensity.QUICK, ScanIntensity.NORMAL, ScanIntensity.INTENSE):
+            return int(value)
 
     def _free_host(self, host):
         """
