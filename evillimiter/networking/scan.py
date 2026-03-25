@@ -1,9 +1,7 @@
-import sys
 import socket
 import threading
 import collections
 from tqdm import tqdm
-from netaddr import IPAddress
 from scapy.all import sr1, ARP # pylint: disable=no-name-in-module
 from concurrent.futures import ThreadPoolExecutor
 

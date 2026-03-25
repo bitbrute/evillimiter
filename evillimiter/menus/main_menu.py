@@ -3,7 +3,6 @@ import socket
 import curses
 import netaddr
 import threading
-import collections
 from terminaltables import SingleTable
 
 import evillimiter.networking.utils as netutils

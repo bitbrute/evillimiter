@@ -1,6 +1,3 @@
-from evillimiter.console.io import IO
-
-
 class BarChart(object):
     def __init__(self, draw_char='▇', max_bar_length=30):
         self.draw_char = draw_char
