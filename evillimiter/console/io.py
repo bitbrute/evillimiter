@@ -1,8 +1,6 @@
 import re
 import colorama
 
-from . import shell
-
 
 class IO(object):
     _ANSI_CSI_RE = re.compile('\001?\033\\[((?:\\d|;)*)([a-zA-Z])\002?') 
@@ -68,6 +66,7 @@ class IO(object):
         """
         Clears the terminal screen
         """
+        from evillimiter.console import shell
         shell.execute('clear')
 
     @staticmethod

@@ -244,10 +244,10 @@ class MainMenu(CommandMenu):
                 IO.error('unable to resolve mac address. specify manually (--mac).')
                 return
 
-        name = None
+        name = ''
         try:
             host_info = socket.gethostbyaddr(ip)
-            name = None if host_info is None else host_info[0]
+            name = host_info[0]
         except socket.herror:
             pass
 
