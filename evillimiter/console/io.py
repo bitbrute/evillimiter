@@ -5,7 +5,7 @@ from . import shell
 
 
 class IO(object):
-    _ANSI_CSI_RE = re.compile('\001?\033\\[((?:\\d|;)*)([a-zA-Z])\002?') 
+    _ANSI_CSI_RE = re.compile(r'\001?\033\[((?:\d|;)*)([a-zA-Z])\002?')
 
     Back = colorama.Back
     Fore = colorama.Fore

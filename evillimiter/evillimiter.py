@@ -1,10 +1,12 @@
 import re
 import os
 import os.path
+import sys
+import atexit
+import signal
 import argparse
 import platform
 import collections
-import pkg_resources
 
 import evillimiter.networking.utils as netutils
 from evillimiter.menus.main_menu import MainMenu
@@ -170,10 +172,15 @@ def run():
         return
     
     if initialize(args.interface):
-        IO.spacer()        
+        # register cleanup for crash/signal safety
+        atexit.register(cleanup, args.interface)
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+        IO.spacer()
         menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask)
         menu.start()
         cleanup(args.interface)
+        atexit.unregister(cleanup)
 
 
 if __name__ == '__main__':

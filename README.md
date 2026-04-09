@@ -25,14 +25,23 @@ Possibly missing python packages will be installed during the installation proce
 ```bash
 git clone https://github.com/bitbrute/evillimiter.git
 cd evillimiter
-sudo python3 setup.py install
+uv venv .venv --python 3.14
+uv pip install -e .
 ```
-
-Alternatively, you can download a desired version from the [Release page](https://github.com/bitbrute/evillimiter/releases).<br>
 
 ## Usage
 
-Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
+Run with root privileges using the venv's Python:
+
+```bash
+sudo .venv/bin/evillimiter
+```
+
+Or directly with the venv'sex Python:
+
+```bash
+sudo .venv/bin/python -m evillimiter.evillimiter
+```
 
 ```evillimiter``` will try to resolve required information (network interface, netmask, gateway address, ...) on its own, automatically.
 

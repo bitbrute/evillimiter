@@ -119,7 +119,7 @@ class BitRate(object):
 
         while True:
             if r >= 1000:
-                r /= 1000
+                r //= 1000
                 counter += 1
             else:
                 unit = ''
@@ -131,11 +131,11 @@ class BitRate(object):
                     unit = 'mbit'
                 elif counter == 3:
                     unit = 'gbit'
-                
+
                 return '{}{}'.format(int(r), unit)
-            
+
             if counter > 3:
-                raise Exception('Bitrate limit exceeded')
+                raise ValueError('Bitrate limit exceeded')
 
     def __mul__(self, other):
         if isinstance(other, BitRate):
@@ -176,7 +176,7 @@ class BitRate(object):
         elif unit == 'gbit':
             return number * 1000 ** 3
         else:
-            raise Exception('Invalid bitrate')
+            raise ValueError('Invalid bitrate')
 
 
 class ByteValue(object):
@@ -192,7 +192,7 @@ class ByteValue(object):
 
         while True:
             if v >= 1024:
-                v /= 1024
+                v //= 1024
                 counter += 1
             else:
                 unit = ''
@@ -206,11 +206,11 @@ class ByteValue(object):
                     unit = 'gb'
                 elif counter == 4:
                     unit = 'tb'
-                
+
                 return '{}{}'.format(int(v), unit)
-            
+
             if counter > 3:
-                raise Exception('Byte value limit exceeded')
+                raise ValueError('Byte value limit exceeded')
 
     def __int__(self):
         return self.value
@@ -271,4 +271,4 @@ class ByteValue(object):
         elif unit == 'tb':
             return number * 1024 ** 4
         else:
-            raise Exception('Invalid byte string')
+            raise ValueError('Invalid byte string')

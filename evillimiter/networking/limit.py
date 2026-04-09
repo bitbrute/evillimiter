@@ -156,6 +156,7 @@ class Direction:
     INCOMING = 2
     BOTH = 3
 
+    @staticmethod
     def pretty_direction(direction):
         if direction == Direction.OUTGOING:
             return 'upload'

@@ -62,8 +62,8 @@ class BandwidthMonitor(object):
                 result.upload_rate = BitRate(int(ValueConverter.byte_to_bit(result._upload_temp_size.value) / time_passed))
                 result.download_rate = BitRate(int(ValueConverter.byte_to_bit(result._download_temp_size.value) / time_passed))
 
-                result._upload_temp_size *= 0
-                result._download_temp_size *= 0
+                result._upload_temp_size = ByteValue(0)
+                result._download_temp_size = ByteValue(0)
 
                 self._host_result_dict[host]['last_now'] = time.time()
                 return result
