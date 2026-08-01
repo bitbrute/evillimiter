@@ -1,9 +1,20 @@
 [ CHANGELOG ]
 
 [ v1.6.0 ]
-- Added PyPI packaging configuration (pyproject.toml, setup.py)
-- Added GitHub Actions workflow for automated PyPI publishing on release
+- Added PyPI packaging configuration (pyproject.toml, setup.py) and GitHub Actions automated PyPI publish workflow
+- Removed legacy bin/evillimiter script in favor of setuptools console_scripts entry point
+- Improved shell/IO utilities (enhanced readline support, binary locator, sudo handling)
+- Enhanced ARP spoofer for safer restoration and thread safety
+- Accelerated monitoring engine with raw socket fallback & curses/CLI fallback
+- Added IFB-based ingress traffic shaping and netfilter conntrack table flushing
+- Added stealth mode operation
+- Enhanced host scanning with DNS hostname resolution and MAC OUI vendor lookup
+- Added session save/load capabilities
+- Added analysis export functionality
+- Added 'doctor' diagnostic command for environment and dependency health checks
+- Various threading, locking, and stability robustness fixes
 - Updated README documentation
+
 
 [ v1.5.0 ]
 - Added host bandwidth usage analysis without limiting (e.g.: analyze 2,3,4 --duration 120)
