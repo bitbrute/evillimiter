@@ -1,10 +1,20 @@
-import re
+import sys
 import os
 import os.path
+import re
 import argparse
 import platform
 import collections
-import pkg_resources
+
+# Fix sys.path if run directly from inside the package directory
+curr_dir = os.path.abspath(os.path.dirname(__file__))
+parent_dir = os.path.abspath(os.path.join(curr_dir, '..'))
+
+if sys.path and os.path.abspath(sys.path[0]) == curr_dir:
+    sys.path.pop(0)
+
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 import evillimiter.networking.utils as netutils
 from evillimiter.menus.main_menu import MainMenu
@@ -12,7 +22,7 @@ from evillimiter.console.banner import get_main_banner
 from evillimiter.console.io import IO
 
 
-InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac')
+InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac, stealth')
 
 
 def get_init_content():
@@ -55,6 +65,7 @@ def parse_arguments():
     parser.add_argument('-m', '--gateway-mac', dest='gateway_mac', help='gateway mac address. automatically resolved if not specified.')
     parser.add_argument('-n', '--netmask', help='netmask for the network. automatically resolved if not specified.')
     parser.add_argument('-f', '--flush', action='store_true', help='flush current iptables (firewall) and tc (traffic control) settings.')
+    parser.add_argument('--stealth', action='store_true', help='enable stealth mode: suppresses local ICMP/IP leakage and inbound service probes.')
     parser.add_argument('--colorless', action='store_true', help='disable colored output.')
 
     return parser.parse_args()
@@ -113,35 +124,69 @@ def process_arguments(args):
 
     IO.ok('netmask: {}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, netmask, IO.Style.RESET_ALL))
 
+    if args.stealth:
+        IO.ok('stealth mode: {}{}enabled{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.BRIGHT, IO.Style.RESET_ALL))
+
     if args.flush:
         netutils.flush_network_settings(interface)
         IO.spacer()
         IO.ok('flushed network settings')
 
-    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask)
+    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask, stealth=args.stealth)
 
 
-def initialize(interface):
+def initialize(interface, gateway_ip=None, gateway_mac=None, stealth=False):
     """
-    Sets up requirements, e.g. IP-Forwarding, 3rd party applications
+    Initializes network-related settings
+    (ip forwarding, qdisc, stealth mode)
     """
     if not netutils.create_qdisc_root(interface):
         IO.spacer()
         IO.error('qdisc root handle could not be created. maybe flush network settings (--flush).')
         return False
 
-    if not netutils.enable_ip_forwarding():
+    netutils.setup_ifb(interface)
+
+    if not netutils.enable_ip_forwarding(interface, gateway_ip, gateway_mac):
         IO.spacer()
         IO.error('ip forwarding could not be enabled.')
         return False
 
+    if stealth:
+        netutils.enable_stealth_mode(interface)
+
     return True
+
+
+import signal
+
+_current_menu = None
+_current_interface = None
+
+
+def _emergency_signal_handler(signum, frame):
+    global _current_menu, _current_interface
+    IO.spacer()
+    IO.ok('signal received. performing emergency network cleanup...')
+    if _current_menu is not None:
+        try:
+            _current_menu.interrupt_handler(False)
+        except Exception:
+            pass
+    if _current_interface is not None:
+        try:
+            cleanup(_current_interface)
+        except Exception:
+            pass
+    sys.exit(0)
 
 
 def cleanup(interface):
     """
     Resets what has been initialized
     """
+    netutils.disable_stealth_mode(interface)
+    netutils.delete_ifb(interface)
     netutils.delete_qdisc_root(interface)
     netutils.disable_ip_forwarding()
 
@@ -150,6 +195,8 @@ def run():
     """
     Main entry point of the application
     """
+    global _current_menu, _current_interface
+
     version = get_version()
     args = parse_arguments()
 
@@ -168,10 +215,16 @@ def run():
 
     if args is None:
         return
-    
-    if initialize(args.interface):
+
+    _current_interface = args.interface
+
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, _emergency_signal_handler)
+
+    if initialize(args.interface, args.gateway_ip, args.gateway_mac, args.stealth):
         IO.spacer()        
         menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask)
+        _current_menu = menu
         menu.start()
         cleanup(args.interface)
 

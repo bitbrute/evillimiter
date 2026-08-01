@@ -1,8 +1,35 @@
 import enum
+import shlex
 import collections
 
 from .parser import CommandParser
 from evillimiter.console.io import IO
+
+
+class CommandCompleter(object):
+    def __init__(self, commands, subcommands=None):
+        self.commands = commands
+        self.subcommands = subcommands or {}
+
+    def complete(self, text, state):
+        try:
+            import readline
+            buffer = readline.get_line_buffer().lstrip()
+        except Exception:
+            buffer = text
+
+        tokens = buffer.split()
+
+        if not tokens or (len(tokens) == 1 and not buffer.endswith(' ')):
+            options = [c for c in self.commands if c.startswith(text)]
+        else:
+            cmd = tokens[0]
+            sub_options = self.subcommands.get(cmd, [])
+            options = [s for s in sub_options if s.startswith(text)]
+
+        if state < len(options):
+            return options[state]
+        return None
 
 
 class CommandMenu(object):
@@ -10,6 +37,14 @@ class CommandMenu(object):
         self.prompt = '>>> '
         self.parser = CommandParser()
         self._active = False
+
+    def setup_completer(self, commands, subcommands=None):
+        try:
+            import readline
+            completer = CommandCompleter(commands, subcommands)
+            readline.set_completer(completer.complete)
+        except Exception:
+            pass
 
     def argument_handler(self, args):
         """
@@ -37,8 +72,15 @@ class CommandMenu(object):
                 self.interrupt_handler()
                 break
 
-            # split command by spaces and parse the arguments
-            parsed_args = self.parser.parse(command.split())
+            if not command.strip():
+                continue
+
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                tokens = command.split()
+
+            parsed_args = self.parser.parse(tokens)
             if parsed_args is not None:
                 self.argument_handler(parsed_args)
 

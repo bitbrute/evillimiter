@@ -1,81 +1,222 @@
-<p align="center"><img src="https://i.imgur.com/CBGh0Yx.png" /></p>
+# EvilLimiter
 
-# Evil Limiter
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/bitbrute/evillimiter)
+[![Python](https://img.shields.io/badge/python-3.6+-yellow.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux-orange.svg)](https://www.kernel.org/)
 
-[![License Badge](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Compatibility](https://img.shields.io/badge/python-3-brightgreen.svg)](PROJECT)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
-[![HitCount](http://hits.dwyl.io/bitbrute/evillimiter.svg)](http://hits.dwyl.io/bitbrute/evillimiter)
-[![Open Source Love](https://badges.frapsoft.com/os/v3/open-source.svg?v=102)](https://github.com/ellerbrock/open-source-badge/)
+**EvilLimiter** is an advanced network management tool that monitors, analyzes, and limits the upload and download bandwidth of devices on a local network (LAN) without requiring administrative or physical access to the network router.
 
-A tool to monitor, analyze and limit the bandwidth (upload/download) of devices on your local network without physical or administrative access.<br>
-```evillimiter``` employs [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) and [traffic shaping](https://en.wikipedia.org/wiki/Traffic_shaping) to throttle the bandwidth of hosts on the network.
+It employs ARP spoofing (Man-in-the-Middle) paired with Linux Traffic Control (`tc`) to shape and restrict network traffic to and from targeted hosts.
 
-**Searching for a Windows-compatible version?**<br>
-Check out the open-source alternative [EvilLimiter for Windows](https://github.com/bitbrute/evillimiter-windows).
+---
 
-## Requirements
-- Linux distribution
-- Python 3 or greater
+## ⚡ Features
 
-Possibly missing python packages will be installed during the installation process.
+- **Bandwidth Limiting**: Restrict upload and/or download speeds on targeted hosts (`100kbit`, `1mbit`, `10mbit`, etc.).
+- **Host Blocking**: Completely cut off internet access for selected devices on the LAN.
+- **Independent Directional Control**: Limit upload traffic, download traffic, or both simultaneously.
+- **Traffic Monitoring**: Interactively monitor real-time upload and download bandwidth usage per host.
+- **Traffic Analysis**: Analyze host bandwidth utilization over custom durations without applying limits.
+- **Flexible Target Selection**: Select targets by ID, range (`1-5`), comma-separated list (`1,3,5`), `all`, IP address, or MAC address.
+- **Host Watcher**: Automatically monitor network reconnections and track hosts IP address changes.
+- **State Save & Load**: Save discovered hosts and custom configurations to restore session states.
+- **Stealth Mode**: Suppress local ICMP/IP leakage and inbound service probes to maintain low visibility.
+- **System Diagnostics**: Built-in `doctor` command to diagnose system binaries, firewall, and dependency states.
 
-## Installation
+---
 
+## 🛠️ Requirements & Dependencies
+
+### Operating System
+- **Linux** (Ubuntu, Debian, Kali Linux, Arch Linux, Fedora, etc.)
+- **Root privileges** (required for ARP spoofing and `iptables`/`tc` manipulation)
+
+### System Tools
+- `python` (v3.6 or higher)
+- `iptables`
+- `tc` (Linux Traffic Control, included in `iproute2`)
+
+### Python Libraries
+- `scapy`
+- `terminaltables`
+- `colorama`
+- `netifaces`
+- `netaddr`
+- `tqdm`
+
+---
+
+## 🚀 Installation
+
+### Option 1: Install via PyPI
+```bash
+sudo pip install evillimiter
+```
+
+### Option 2: Install from Source
 ```bash
 git clone https://github.com/bitbrute/evillimiter.git
 cd evillimiter
-sudo python3 setup.py install
+sudo python setup.py install
 ```
 
-Alternatively, you can download a desired version from the [Release page](https://github.com/bitbrute/evillimiter/releases).<br>
+---
 
-## Usage
 
-Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
+## 📖 Command-Line Options
 
-```evillimiter``` will try to resolve required information (network interface, netmask, gateway address, ...) on its own, automatically.
+Launch EvilLimiter with root privileges:
 
-#### Command-Line Arguments
+```bash
+sudo evillimiter [options]
+```
 
-| Argument | Explanation |
-| -------- | ----------- |
-| ```-h``` | Displays help message listing all command-line arguments |
-| ```-i [Interface Name]``` | Specifies network interface (resolved if not specified)|
-| ```-g [Gateway IP Address]``` | Specifies gateway IP address (resolved if not specified)|
-| ```-m [Gateway MAC Address]``` | Specifies gateway MAC address (resolved if not specified)|
-| ```-n [Netmask Address]``` | Specifies netmask (resolved if not specified)|
-| ```-f``` | Flushes current iptables and tc configuration. Ensures that packets are dealt with correctly.|
-| ```--colorless``` | Disables colored output |
+### Available Flags
 
-#### ```evillimiter``` Commands
+| Flag | Long Flag | Description |
+| :--- | :--- | :--- |
+| `-i` | `--interface` | Network interface connected to target network (e.g., `eth0`, `wlan0`). Auto-resolved if omitted. |
+| `-g` | `--gateway-ip` | Gateway IP address. Auto-resolved if omitted. |
+| `-m` | `--gateway-mac` | Gateway MAC address. Auto-resolved if omitted. |
+| `-n` | `--netmask` | Network netmask (e.g., `255.255.255.0`). Auto-resolved if omitted. |
+| `-f` | `--flush` | Flush existing `iptables` rules and `tc` qdisc settings before launching. |
+| | `--stealth` | Enable stealth mode (suppresses ICMP leakage and service probes). |
+| | `--colorless` | Disable colored terminal output. |
 
-| Command | Explanation |
-| ------- | ----------- |
-| ```scan (--range [IP Range])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
-| ```hosts (--force)``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.<br>```--force``` forces the table to be shown, even when it doesn't fit the terminal.
-| ```limit [ID1,ID2,...] [Rate] (--upload) (--download)``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed.<br>```--upload``` limits outgoing traffic only.<br>```--download``` limits incoming traffic only.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
-| ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
-| ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
-| ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
-| ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of limited host(s) (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval after bandwidth information get refreshed in milliseconds (default 500ms).<br>For example: ```monitor --interval 1000```
-| ```analyze [ID1,ID2,...] (--duration [time in s])``` | Analyzes traffic of host(s) without limiting to determine who uses how much bandwidth.<br>```--duration``` specifies the duration of the analysis in seconds (default 30s).<br>For example: ```analyze 2,3 --duration 120```
-| ```watch``` | Shows current watch status. The watch feature detects when a host reconnects with a different IP address.
-| ```watch add [ID1,ID2,...]``` | Adds specified host(s) to the watchlist.<br>For example: ```watch add 6,7,8```
-| ```watch remove [ID1,ID2,...]``` | Removes specified host(s) from the watchlist.<br>For example: ```watch remove all```
-| ```watch set [Attribute] [Value]``` | Changes current watch settings. The following attributes can be changed:<br>```range``` is the IP range to scan for reconnects.<br>```interval``` is the time to wait between each network scan (in seconds).<br>For example: ```watch set interval 120```
-| ```clear``` | Clears the terminal window.
-| ```quit``` | Quits the application.
-| ```?```, ```help``` | Displays command information similar to this one.
+---
 
-## Restrictions
+## 💻 Interactive Console Commands
 
-- **Limits IPv4 connctions only**, since [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) requires the ARP packet that is only present  on IPv4 networks.
+Once inside the interactive shell (`(Main) >>>`), the following commands are available:
 
-## Disclaimer
-[Evil Limiter](https://github.com/bitbrute/evillimiter) is provided by [bitbrute](https://github.com/bitbrute) "as is" and "with all faults". The provider makes no representations or warranties of any kind concerning the safety, suitability, lack of viruses, inaccuracies, typographical errors, or other harmful components of this software. There are inherent dangers in the use of any software, and you are solely responsible for determining whether Evil Limiter is compatible with your equipment and other software installed on your equipment. You are also solely responsible for the protection of your equipment and backup of your data, and the provider will not be liable for any damages you may suffer in connection with using, modifying, or distributing this software. 
+### 1. Host Discovery & Listing
 
-## License
+- **`scan [--range <IP range>]`**  
+  Scans the local network for active hosts using ARP requests.
+  ```bash
+  (Main) >>> scan
+  (Main) >>> scan --range 192.168.1.1-192.168.1.50
+  ```
 
-Copyright (c) 2019 by [bitbrute](https://github.com/bitbrute). Some rights reserved.<br>
-[Evil Limiter](https://github.com/bitbrute/evillimiter) is licensed under the MIT License as stated in the [LICENSE file](LICENSE).
+- **`hosts [--force]`**  
+  Displays a table of discovered hosts with IDs, IP addresses, MAC addresses, hostnames, and current bandwidth limits.
+  ```bash
+  (Main) >>> hosts
+  (Main) >>> hosts --force
+  ```
+
+- **`add <IP> [--mac <MAC>]`**  
+  Manually add a host to the host table.
+  ```bash
+  (Main) >>> add 192.168.1.45
+  (Main) >>> add 192.168.1.45 --mac 00:11:22:33:44:55
+  ```
+
+---
+
+### 2. Bandwidth Limiting & Blocking
+
+Target host specification accepts:
+- Single ID: `2`
+- Multiple IDs: `1,3,4`
+- Range: `1-5`
+- Keyword: `all`
+- IP address: `192.168.1.100`
+- MAC address: `00:11:22:33:44:55`
+
+- **`limit <ID> <rate> [--upload] [--download]`**  
+  Limits bandwidth of specified target(s). Rates can be specified in `kbit` or `mbit` (e.g., `500kbit`, `2mbit`).
+  ```bash
+  (Main) >>> limit 2 1mbit
+  (Main) >>> limit 1,3 500kbit --upload
+  (Main) >>> limit all 2mbit --download
+  ```
+
+- **`block <ID> [--upload] [--download]`**  
+  Completely blocks internet traffic for target host(s).
+  ```bash
+  (Main) >>> block 4
+  (Main) >>> block 1-3 --download
+  ```
+
+- **`free <ID>`**  
+  Removes bandwidth restrictions and restores original connectivity for target host(s).
+  ```bash
+  (Main) >>> free 2
+  (Main) >>> free all
+  ```
+
+---
+
+### 3. Monitoring & Analysis
+
+- **`monitor [--interval <ms>]`**  
+  Displays live upload and download throughput for all discovered network hosts.
+  ```bash
+  (Main) >>> monitor
+  (Main) >>> monitor --interval 2000
+  ```
+
+- **`analyze <ID> [--duration <sec>] [--export <file>]`**  
+  Analyzes real-time traffic usage of specified hosts over a period without enforcing speed limits.
+  ```bash
+  (Main) >>> analyze 2 --duration 60
+  (Main) >>> analyze 1,3 --duration 120 --export log.csv
+  ```
+
+---
+
+### 4. Host Watcher & Reconnection Tracking
+
+- **`watch add <ID>`** / **`watch remove <ID>`**  
+  Add or remove hosts from the watcher list to track IP address changes and reconnections.
+  ```bash
+  (Main) >>> watch add 2
+  (Main) >>> watch remove 2
+  ```
+
+- **`watch set <attribute> <value>`**  
+  Configure watcher options.
+
+---
+
+### 5. Diagnostics & Session Management
+
+- **`doctor`** / **`diagnostics`**  
+  Runs a diagnostic check on system environment, firewall rules, required binaries, and active network handles.
+  ```bash
+  (Main) >>> doctor
+  ```
+
+- **`save <filename>`** / **`load <filename>`**  
+  Save host state list to a file or load previously saved state.
+  ```bash
+  (Main) >>> save session.json
+  (Main) >>> load session.json
+  ```
+
+- **`clear`**  
+  Clears the terminal screen.
+
+- **`quit`** / **`exit`**  
+  Exits EvilLimiter and automatically restores normal network configuration for all hosts.
+
+---
+
+## 🔒 How It Works
+
+1. **ARP Spoofing (MITM)**: EvilLimiter periodically sends crafted ARP reply packets to target host(s) and the default gateway, convincing target devices that the host machine is the router (and vice versa).
+2. **Packet Forwarding**: IP forwarding is enabled so network packets flow smoothly through the host system without dropping unless configured to block.
+3. **Traffic Control (`tc`) & Firewall (`iptables`)**: Linux Traffic Control HTB (Hierarchical Token Bucket) queues and IFB (Intermediate Functional Block) pseudo-interfaces shape ingress and egress rate limits on network packets in real-time.
+4. **Emergency Signals & Cleanup**: Upon normal termination (`quit`/`exit`) or unexpected termination (SIGINT/SIGTERM), EvilLimiter restores original ARP caches and removes custom `tc` qdiscs and `iptables` rules.
+
+## ⚖️ Disclaimer
+
+**EvilLimiter** is created for educational, research, and legitimate network management purposes only. Using this tool on networks without prior explicit consent from the network owner or administrator is illegal. The author and contributors accept no responsibility for misuse or illegal activities conducted with this software.
+
+---
+
+## 📜 License
+
+Distributed under the [MIT License](LICENSE).

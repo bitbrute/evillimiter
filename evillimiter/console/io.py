@@ -1,8 +1,6 @@
 import re
 import colorama
 
-from . import shell
-
 
 class IO(object):
     _ANSI_CSI_RE = re.compile('\001?\033\\[((?:\\d|;)*)([a-zA-Z])\002?') 
@@ -16,11 +14,28 @@ class IO(object):
     @staticmethod
     def initialize(colorless=False):
         """
-        Initializes console input and output.
+        Initializes console input, output, and terminal line editing.
         """
         IO.colorless = colorless
         if not colorless:
             colorama.init(autoreset=True)
+
+        try:
+            import readline
+            readline.parse_and_bind("tab: complete")
+            try:
+                readline.parse_and_bind(r'"\e[D": backward-char')
+                readline.parse_and_bind(r'"\e[C": forward-char')
+                readline.parse_and_bind(r'"\e[A": previous-history')
+                readline.parse_and_bind(r'"\e[B": next-history')
+            except Exception:
+                pass
+        except ImportError:
+            try:
+                import pyreadline3 as readline
+                readline.parse_and_bind("tab: complete")
+            except ImportError:
+                pass
 
     @staticmethod
     def print(text, end='\n', flush=False):
@@ -68,14 +83,9 @@ class IO(object):
         """
         Clears the terminal screen
         """
+        import evillimiter.console.shell as shell
         shell.execute('clear')
 
     @staticmethod
     def _remove_colors(text):
-        edited = text
-
-        for match in IO._ANSI_CSI_RE.finditer(text):
-                s, e = match.span()
-                edited = edited.replace(text[s:e], '')
-
-        return edited
+        return IO._ANSI_CSI_RE.sub('', text)

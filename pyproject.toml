@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evillimiter"
+version = "1.6.0"
+description = "Monitors, analyzes and limits the bandwidth of devices on the local network"
+readme = "README.md"
+authors = [
+    { name = "bitbrute" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.6"
+dependencies = [
+    "terminaltables",
+    "colorama",
+    "scapy",
+    "netifaces",
+    "netaddr",
+    "tqdm"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Networking",
+    "Topic :: Security"
+]
+
+[project.urls]
+Homepage = "https://github.com/bitbrute/evillimiter"
+Repository = "https://github.com/bitbrute/evillimiter"
+"Bug Tracker" = "https://github.com/bitbrute/evillimiter/issues"
+
+[project.scripts]
+evillimiter = "evillimiter.evillimiter:run"

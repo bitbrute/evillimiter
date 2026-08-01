@@ -1,6 +1,9 @@
 import time
 import socket
-import curses
+try:
+    import curses
+except ImportError:
+    curses = None
 import netaddr
 import threading
 import collections
@@ -56,6 +59,16 @@ class MainMenu(CommandMenu):
         analyze_parser = self.parser.add_subparser('analyze', self._analyze_handler)
         analyze_parser.add_parameter('id')
         analyze_parser.add_parameterized_flag('--duration', 'duration')
+        analyze_parser.add_parameterized_flag('--export', 'export')
+
+        save_parser = self.parser.add_subparser('save', self._save_handler)
+        save_parser.add_parameter('filename')
+
+        load_parser = self.parser.add_subparser('load', self._load_handler)
+        load_parser.add_parameter('filename')
+
+        self.parser.add_subparser('doctor', self._doctor_handler)
+        self.parser.add_subparser('diagnostics', self._doctor_handler)
 
         watch_parser = self.parser.add_subparser('watch', self._watch_handler)
         watch_add_parser = watch_parser.add_subparser('add', self._watch_add_handler)
@@ -90,6 +103,21 @@ class MainMenu(CommandMenu):
         # holds discovered hosts
         self.hosts = []
         self.hosts_lock = threading.Lock()
+        commands = [
+            'scan', 'hosts', 'limit', 'block', 'free', 'add',
+            'monitor', 'analyze', 'watch', 'save', 'load',
+            'doctor', 'help', 'quit', 'exit'
+        ]
+        subcommands = {
+            'watch': ['add', 'remove', 'set'],
+            'scan': ['--range'],
+            'hosts': ['--force'],
+            'limit': ['--upload', '--download'],
+            'block': ['--upload', '--download'],
+            'analyze': ['--duration', '--export'],
+            'monitor': ['--interval']
+        }
+        self.setup_completer(commands, subcommands)
 
         self._print_help_reminder()
 
@@ -132,9 +160,8 @@ class MainMenu(CommandMenu):
         IO.spacer()
         hosts = self.host_scanner.scan(iprange)
 
-        self.hosts_lock.acquire()
-        self.hosts = hosts
-        self.hosts_lock.release()
+        with self.hosts_lock:
+            self.hosts = hosts
 
         IO.ok('{}{}{} hosts discovered.'.format(IO.Fore.LIGHTYELLOW_EX, len(hosts), IO.Style.RESET_ALL))
         IO.spacer()
@@ -265,38 +292,87 @@ class MainMenu(CommandMenu):
     def _monitor_handler(self, args):
         """
         Handles 'monitor' command-line argument
-        Monitors hosts bandwidth usage
+        Monitors hosts bandwidth usage with flicker-free rendering and flexible interval support
         """
         def get_bandwidth_results():
             with self.hosts_lock:
                 return [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None]
 
-        def display(stdscr, interval):
-            host_results = get_bandwidth_results()
-            hname_max_len = max([len(x[0].name) for x in host_results])
+        interval = 0.5  # default 500ms
+        if args.interval:
+            val_str = str(args.interval).strip().lower()
+            try:
+                if val_str.endswith('ms'):
+                    interval = float(val_str[:-2]) / 1000.0
+                elif val_str.endswith('s'):
+                    interval = float(val_str[:-1])
+                else:
+                    val_num = float(val_str)
+                    interval = (val_num / 1000.0) if val_num >= 10 else val_num
+            except Exception:
+                IO.error('invalid interval string.')
+                return
 
-            header_off = [
-                ('ID', 5), ('IP address', 18), ('Hostname', hname_max_len + 2),
-                ('Current (per s)', 20), ('Total', 16), ('Packets', 0)
-            ]
+        interval = max(0.1, min(10.0, interval))
 
-            y_rst = 1
-            x_rst = 2
+        initial_results = get_bandwidth_results()
+        if len(initial_results) == 0:
+            IO.error('no hosts to be monitored. scan or limit hosts first.')
+            return
+
+        def curses_display(stdscr, interval):
+            try:
+                curses.curs_set(0)
+            except Exception:
+                pass
+            stdscr.nodelay(True)
 
             while True:
-                y_off = y_rst
-                x_off = x_rst
+                try:
+                    ch = stdscr.getch()
+                    if ch in (ord('q'), ord('Q'), 3, 27):  # 'q', 'Q', Ctrl+C, ESC
+                        break
+                except Exception:
+                    pass
 
-                stdscr.clear()
+                host_results = get_bandwidth_results()
+                max_y, max_x = stdscr.getmaxyx()
+
+                stdscr.erase()
+
+                if max_y < 5 or max_x < 40:
+                    try:
+                        stdscr.addstr(0, 0, 'terminal too small for monitor.')
+                        stdscr.refresh()
+                    except Exception:
+                        pass
+                    time.sleep(interval)
+                    continue
+
+                hname_max_len = max([len(x[0].name) for x in host_results]) if host_results else 10
+                header_off = [
+                    ('ID', 5), ('IP address', 18), ('Hostname', max(12, hname_max_len + 2)),
+                    ('Current (per s)', 22), ('Total', 18), ('Packets', 0)
+                ]
+
+                y_off = 1
+                x_off = 2
 
                 for header in header_off:
-                    stdscr.addstr(y_off, x_off, header[0])
+                    if x_off + len(header[0]) < max_x:
+                        try:
+                            stdscr.addstr(y_off, x_off, header[0], curses.A_BOLD if hasattr(curses, 'A_BOLD') else 0)
+                        except Exception:
+                            pass
                     x_off += header[1]
 
                 y_off += 2
-                x_off = x_rst
+                x_off = 2
 
                 for host, result in host_results:
+                    if y_off >= max_y - 2:
+                        break
+
                     result_data = [
                         str(self._get_host_id(host)),
                         host.ip,
@@ -307,39 +383,58 @@ class MainMenu(CommandMenu):
                     ]
 
                     for j, string in enumerate(result_data):
-                        stdscr.addstr(y_off, x_off, string)
+                        if x_off + len(string) < max_x:
+                            try:
+                                stdscr.addstr(y_off, x_off, string[:max(1, max_x - x_off - 1)])
+                            except Exception:
+                                pass
                         x_off += header_off[j][1]
 
                     y_off += 1
-                    x_off = x_rst
+                    x_off = 2
 
-                y_off += 2
-                stdscr.addstr(y_off, x_off, 'press \'ctrl+c\' to exit.')
-
+                y_off = min(max_y - 1, y_off + 1)
                 try:
+                    stdscr.addstr(y_off, 2, 'press \'q\' or \'ctrl+c\' to exit monitor.')
                     stdscr.refresh()
-                    time.sleep(interval)
+                except Exception:
+                    pass
+
+                time.sleep(interval)
+
+        def cli_display(interval):
+            IO.spacer()
+            IO.ok('curses unavailable. running CLI monitor (press ctrl+c to exit)...')
+            IO.spacer()
+            try:
+                while True:
                     host_results = get_bandwidth_results()
-                except KeyboardInterrupt:
-                    return
-                    
+                    table_data = [[
+                        'ID', 'IP address', 'Hostname', 'Current (per s)', 'Total', 'Packets'
+                    ]]
+                    for host, result in host_results:
+                        table_data.append([
+                            str(self._get_host_id(host)),
+                            host.ip,
+                            host.name,
+                            '{}↑ {}↓'.format(result.upload_rate, result.download_rate),
+                            '{}↑ {}↓'.format(result.upload_total_size, result.download_total_size),
+                            '{}↑ {}↓'.format(result.upload_total_count, result.download_total_count)
+                        ])
+                    table = SingleTable(table_data, 'Live Bandwidth Monitor')
+                    print('\033[H\033[J' + table.table)
+                    time.sleep(interval)
+            except KeyboardInterrupt:
+                IO.spacer()
+                IO.ok('monitor stopped.')
 
-        interval = 0.5  # in s
-        if args.interval:
-            if not args.interval.isdigit():
-                IO.error('invalid interval.')
-                return
-
-            interval = int(args.interval) / 1000    # from ms to s
-
-        if len(get_bandwidth_results()) == 0:
-            IO.error('no hosts to be monitored.')
-            return
-
-        try:
-            curses.wrapper(display, interval)
-        except curses.error:
-            IO.error('monitor error occurred. maybe terminal too small?')
+        if curses is not None:
+            try:
+                curses.wrapper(curses_display, interval)
+            except Exception:
+                cli_display(interval)
+        else:
+            cli_display(interval)
 
     def _analyze_handler(self, args):
         hosts = self._get_hosts_by_ids(args.id)
@@ -415,6 +510,165 @@ class MainMenu(CommandMenu):
         IO.spacer()
         IO.print(upload_table.table)
         IO.print(download_table.table)
+        IO.spacer()
+
+        if args.export:
+            filepath = args.export
+            try:
+                import json
+                import csv
+                export_data = []
+                for host in hosts:
+                    up_val = host_values[host]['current'][0] - host_values[host]['prev'][0]
+                    dl_val = host_values[host]['current'][1] - host_values[host]['prev'][1]
+                    export_data.append({
+                        'id': self._get_host_id(host),
+                        'ip': host.ip,
+                        'mac': host.mac,
+                        'name': host.name,
+                        'upload_bytes': up_val.value,
+                        'upload_formatted': str(up_val),
+                        'download_bytes': dl_val.value,
+                        'download_formatted': str(dl_val),
+                        'duration_seconds': duration
+                    })
+
+                if filepath.endswith('.csv'):
+                    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.DictWriter(f, fieldnames=list(export_data[0].keys()))
+                        writer.writeheader()
+                        writer.writerows(export_data)
+                else:
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        json.dump(export_data, f, indent=2)
+
+                IO.ok('analysis exported to {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, filepath, IO.Style.RESET_ALL))
+            except Exception as e:
+                IO.error('failed to export analysis: {}'.format(e))
+
+    def _save_handler(self, args):
+        """
+        Saves current discovered hosts and watch list to a JSON file
+        """
+        filepath = args.filename
+        try:
+            import json
+            with self.hosts_lock:
+                saved_hosts = [{
+                    'ip': h.ip,
+                    'mac': h.mac,
+                    'name': h.name,
+                    'watched': h.watched,
+                    'limited': h.limited,
+                    'blocked': h.blocked
+                } for h in self.hosts]
+
+            data = {
+                'hosts': saved_hosts,
+                'interface': self.interface,
+                'gateway_ip': self.gateway_ip
+            }
+
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+
+            IO.ok('session profile saved to {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, filepath, IO.Style.RESET_ALL))
+        except Exception as e:
+            IO.error('failed to save profile: {}'.format(e))
+
+    def _load_handler(self, args):
+        """
+        Loads saved host list from a JSON file
+        """
+        filepath = args.filename
+        try:
+            import json
+            import os
+            if not os.path.exists(filepath):
+                IO.error('file not found: {}'.format(filepath))
+                return
+
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            loaded_count = 0
+            for item in data.get('hosts', []):
+                host = Host(item['ip'], item['mac'], item.get('name', ''))
+                with self.hosts_lock:
+                    if host not in self.hosts:
+                        self.hosts.append(host)
+                        loaded_count += 1
+                if item.get('watched'):
+                    self.host_watcher.add(host)
+
+            IO.ok('loaded {}{}{} host(s) from {}{}{}.'.format(
+                IO.Fore.LIGHTYELLOW_EX, loaded_count, IO.Style.RESET_ALL,
+                IO.Fore.LIGHTYELLOW_EX, filepath, IO.Style.RESET_ALL
+            ))
+        except Exception as e:
+            IO.error('failed to load profile: {}'.format(e))
+
+    def _doctor_handler(self, args):
+        """
+        Runs system diagnostics to verify kernel settings, binaries, and interface status
+        """
+        import os
+        IO.spacer()
+        IO.print('{}=== EVILLIMITER SYSTEM DIAGNOSTICS ==={}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL))
+        IO.spacer()
+
+        # 1. IP Forwarding Check
+        ip_fwd = 'Disabled'
+        try:
+            with open('/proc/sys/net/ipv4/ip_forward', 'r') as f:
+                val = f.read().strip()
+                if val == '1':
+                    ip_fwd = 'Enabled (1)'
+        except Exception:
+            pass
+
+        IO.print('  [+] IP Forwarding: {}{}{}'.format(
+            IO.Fore.LIGHTGREEN_EX if 'Enabled' in ip_fwd else IO.Fore.LIGHTRED_EX,
+            ip_fwd,
+            IO.Style.RESET_ALL
+        ))
+
+        # 2. Required Binaries
+        for bin_name in ('tc', 'iptables', 'sysctl'):
+            path = netutils.shell.locate_bin(bin_name)
+            is_ok = path and not str(path).startswith('missing')
+            IO.print('  [+] Binary \'{}\': {}{}{}'.format(
+                bin_name,
+                IO.Fore.LIGHTGREEN_EX if is_ok else IO.Fore.LIGHTRED_EX,
+                path if is_ok else 'NOT FOUND',
+                IO.Style.RESET_ALL
+            ))
+
+        # 3. Interface Status
+        iface_state = 'Unknown'
+        try:
+            oper_file = '/sys/class/net/{}/operstate'.format(self.interface)
+            if os.path.exists(oper_file):
+                with open(oper_file, 'r') as f:
+                    iface_state = f.read().strip()
+        except Exception:
+            pass
+
+        IO.print('  [+] Interface \'{}\': {}{}{}'.format(
+            self.interface,
+            IO.Fore.LIGHTGREEN_EX if iface_state == 'up' else IO.Fore.LIGHTYELLOW_EX,
+            iface_state,
+            IO.Style.RESET_ALL
+        ))
+
+        # 4. Gateway Info
+        IO.print('  [+] Default Gateway: {}{} ({}){}'.format(
+            IO.Fore.LIGHTYELLOW_EX,
+            self.gateway_ip,
+            self.gateway_mac,
+            IO.Style.RESET_ALL
+        ))
+
         IO.spacer()
 
     def _watch_handler(self, args):
@@ -590,7 +844,13 @@ class MainMenu(CommandMenu):
 
 {y}analyze [ID1,ID2,...]{r}{}analyzes traffic of host(s) without limiting
 {y}        (--duration [time in s]){r}{}to determine who uses how much bandwidth.
-{b}{s}e.g.: analyze 2,3 --duration 120{r}
+{y}        (--export [file]){r}{}{b}e.g.: analyze 2,3 --duration 120 --export report.json{r}
+
+{y}save [filename]{r}{}saves current host session to a JSON file.
+{b}{s}e.g.: save profile.json{r}
+
+{y}load [filename]{r}{}loads host session from a JSON file.
+{b}{s}e.g.: load profile.json{r}
 
 {y}watch{r}{}detects host reconnects with different IP.
 {y}watch add [ID1,ID2,...]{r}{}adds host to the reconnection watchlist.
@@ -615,6 +875,9 @@ class MainMenu(CommandMenu):
                     spaces[len('monitor (--interval [time in ms])'):],
                     spaces[len('analyze [ID1,ID2,...]'):],
                     spaces[len('        (--duration [time in s])'):],
+                    spaces[len('        (--export [file])'):],
+                    spaces[len('save [filename]'):],
+                    spaces[len('load [filename]'):],
                     spaces[len('watch'):],
                     spaces[len('watch add [ID1,ID2,...]'):],
                     spaces[len('watch remove [ID1,ID2,...]'):],
@@ -631,20 +894,16 @@ class MainMenu(CommandMenu):
         self.stop()
 
     def _get_host_id(self, host, lock=True):
-        ret = None
+        def _find():
+            try:
+                return self.hosts.index(host)
+            except ValueError:
+                return None
 
         if lock:
-            self.hosts_lock.acquire()
-
-        for i, host_ in enumerate(self.hosts):
-            if host_ == host:
-                ret = i
-                break
-        
-        if lock:
-            self.hosts_lock.release()
-
-        return ret
+            with self.hosts_lock:
+                return _find()
+        return _find()
 
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
@@ -654,11 +913,25 @@ class MainMenu(CommandMenu):
             with self.hosts_lock:
                 return self.hosts.copy()
 
-        ids = ids_string.split(',')
+        raw_tokens = [x.strip() for x in ids_string.split(',') if x.strip()]
+        expanded_ids = []
+
+        for token in raw_tokens:
+            if '-' in token and not token.startswith('-'):
+                parts = token.split('-')
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    start, end = int(parts[0]), int(parts[1])
+                    if start <= end:
+                        expanded_ids.extend([str(i) for i in range(start, end + 1)])
+                    else:
+                        expanded_ids.extend([str(i) for i in range(end, start + 1)])
+                    continue
+            expanded_ids.append(token)
+
         hosts = set()
 
         with self.hosts_lock:
-            for id_ in ids:
+            for id_ in expanded_ids:
                 is_mac = netutils.validate_mac_address(id_)
                 is_ip = netutils.validate_ip_address(id_)
                 is_id_ = id_.isdigit()
@@ -678,11 +951,11 @@ class MainMenu(CommandMenu):
                         IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
                         return
                 else:
-                    id_ = int(id_)
-                    if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
-                        IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                    id_num = int(id_)
+                    if len(self.hosts) == 0 or id_num not in range(len(self.hosts)):
+                        IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_num, IO.Style.RESET_ALL))
                         return
-                    hosts.add(self.hosts[id_])
+                    hosts.add(self.hosts[id_num])
 
         return hosts
 
